@@ -1,0 +1,18 @@
+-- Create stocks table
+CREATE TABLE stocks (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    symbol VARCHAR(20) NOT NULL UNIQUE,
+    company_name VARCHAR(200),
+    sector VARCHAR(100),
+    series VARCHAR(10),
+    market_cap BIGINT,
+    face_value DOUBLE,
+    isin VARCHAR(20),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    INDEX idx_symbol (symbol),
+    INDEX idx_sector (sector),
+    INDEX idx_is_active (is_active)
+);

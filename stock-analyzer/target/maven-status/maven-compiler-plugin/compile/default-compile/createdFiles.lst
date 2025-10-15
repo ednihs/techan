@@ -1,0 +1,8 @@
+com/stockanalyzer/dto/BTSTRecommendationDTO.class
+com/stockanalyzer/service/BhavcopyService.class
+com/stockanalyzer/service/TechnicalAnalysisService.class
+com/stockanalyzer/entity/TechnicalIndicator.class
+com/stockanalyzer/repository/TechnicalIndicatorRepository.class
+com/stockanalyzer/dto/BTSTDetailedAnalysisDTO.class
+com/stockanalyzer/entity/PriceData.class
+com/stockanalyzer/repository/PriceDataRepository.class
