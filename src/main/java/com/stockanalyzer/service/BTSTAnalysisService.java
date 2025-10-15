@@ -52,12 +52,17 @@ public class BTSTAnalysisService {
     @Scheduled(cron = "0 0 18 * * MON-FRI", zone = "Asia/Kolkata")
     @Transactional
     public void runDailyAnalysis() {
-        LocalDate analysisDate = LocalDate.now();
-        LocalDate previousDate = analysisDate.minusDays(1);
-        log.info("Running BTST analysis for {}", analysisDate);
+        runAnalysisForDate(LocalDate.now());
+    }
+
+    @Transactional
+    public List<BTSTAnalysis> runAnalysisForDate(LocalDate analysisDate) {
+        LocalDate resolvedAnalysisDate = Optional.ofNullable(analysisDate).orElse(LocalDate.now());
+        LocalDate previousDate = resolvedAnalysisDate.minusDays(1);
+        log.info("Running BTST analysis for {}", resolvedAnalysisDate);
         List<String> candidates = identifyDay1Candidates(previousDate);
         List<CompletableFuture<BTSTAnalysis>> futures = candidates.stream()
-                .map(symbol -> CompletableFuture.supplyAsync(() -> analyze(symbol, previousDate, analysisDate), analysisExecutor)
+                .map(symbol -> CompletableFuture.supplyAsync(() -> analyze(symbol, previousDate, resolvedAnalysisDate), analysisExecutor)
                         .exceptionally(ex -> {
                             log.error("Failed BTST analysis for {}: {}", symbol, ex.getMessage());
                             return null;
@@ -69,7 +74,8 @@ public class BTSTAnalysisService {
                 .filter(result -> result != null && result.getConfidenceScore() != null && result.getConfidenceScore() >= confidenceThreshold)
                 .collect(Collectors.toList());
         btstAnalysisRepository.saveAll(results);
-        log.info("Stored {} BTST analyses", results.size());
+        log.info("Stored {} BTST analyses for {}", results.size(), resolvedAnalysisDate);
+        return results;
     }
 
     public List<String> identifyDay1Candidates(LocalDate date) {

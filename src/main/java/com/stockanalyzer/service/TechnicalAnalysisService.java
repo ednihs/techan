@@ -46,6 +46,15 @@ public class TechnicalAnalysisService {
     }
 
     @Transactional
+    public void calculateIndicatorsForDate(LocalDate asOfDate) {
+        priceDataRepository.findByTradeDateAndVolumeGreaterThanAndValueTradedGreaterThan(asOfDate, 0L, 0L)
+                .stream()
+                .map(PriceData::getSymbol)
+                .distinct()
+                .forEach(symbol -> calculateIndicators(symbol, asOfDate));
+    }
+
+    @Transactional
     public TechnicalIndicator calculateIndicators(String symbol, LocalDate asOfDate) {
         List<PriceData> history = priceDataRepository
                 .findHistoricalData(symbol, asOfDate.minusDays(lookbackDays), asOfDate);
