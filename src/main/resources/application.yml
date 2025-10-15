@@ -4,10 +4,10 @@ spring:
   application:
     name: stock-analyzer
   datasource:
-    url: jdbc:h2:mem:testdb
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: password
+    jdbc-url: jdbc:mysql://localhost:3307/stock_analyzer_v1?createDatabaseIfNotExist=true
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: interOP@123
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
@@ -16,11 +16,11 @@ spring:
       max-lifetime: 1800000
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.H2Dialect
+        dialect: org.hibernate.dialect.MySQLDialect
         format_sql: true
         order_inserts: true
         order_updates: true
@@ -35,7 +35,7 @@ spring:
   jackson:
     serialization:
       write-dates-as-timestamps: false
-      default-property-inclusion: non_null
+    default-property-inclusion: non_null
 fivepaisa:
   api:
     base-url: "https://openapi.5paisa.com/VendorsAPI/Service1.svc"

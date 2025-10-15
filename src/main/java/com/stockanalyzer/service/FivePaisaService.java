@@ -5,6 +5,7 @@ import com.stockanalyzer.dto.MarketFeedData;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -53,7 +54,7 @@ public class FivePaisaService {
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(Collections.singletonMap("symbols", symbols))
                     .retrieve()
-                    .bodyToMono(List.class);
+                    .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
             List<Map<String, Object>> payload = response.blockOptional().orElse(Collections.emptyList());
             return payload.stream().map(this::mapMarketFeed).collect(Collectors.toList());
         } catch (Exception ex) {
@@ -82,7 +83,7 @@ public class FivePaisaService {
                             "from", fromDate.toString(),
                             "to", toDate.toString()))
                     .retrieve()
-                    .bodyToMono(List.class);
+                    .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
             List<Map<String, Object>> payload = response.blockOptional().orElse(Collections.emptyList());
             return payload.stream().map(this::mapHistoricalPoint).collect(Collectors.toList());
         } catch (Exception ex) {

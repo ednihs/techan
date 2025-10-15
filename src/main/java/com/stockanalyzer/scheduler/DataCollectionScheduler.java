@@ -20,7 +20,7 @@ public class DataCollectionScheduler {
     private final BhavcopyService bhavcopyService;
     private final TechnicalAnalysisService technicalAnalysisService;
 
-    @Scheduled(cron = "0 30 16 * * MON-FRI", zone = "Asia/Kolkata")
+    @Scheduled(cron = "0 10 12 * * MON-FRI", zone = "Asia/Kolkata")
     public void collectEndOfDayData() {
         LocalDate tradeDate = LocalDate.now();
         if (tradeDate.getDayOfWeek() == DayOfWeek.SATURDAY || tradeDate.getDayOfWeek() == DayOfWeek.SUNDAY) {
