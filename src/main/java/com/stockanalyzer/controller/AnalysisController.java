@@ -19,6 +19,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -46,6 +47,17 @@ public class AnalysisController {
         LocalDate resolvedDate = DateUtils.resolveDateOrDefault(date, LocalDate.now());
         List<BTSTRecommendationDTO> payload = btstAnalysisRepository
                 .findByAnalysisDateAndRecommendationOrderByConfidenceScoreDesc(resolvedDate, recommendation)
+                .stream()
+                .map(this::toRecommendation)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(payload);
+    }
+
+    @PostMapping("/btst/run")
+    public ResponseEntity<List<BTSTRecommendationDTO>> runOnDemandAnalysis(
+            @RequestParam(defaultValue = "1970-01-01") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        LocalDate resolvedDate = DateUtils.resolveDateOrDefault(date, LocalDate.now());
+        List<BTSTRecommendationDTO> payload = btstAnalysisService.runAnalysis(resolvedDate)
                 .stream()
                 .map(this::toRecommendation)
                 .collect(Collectors.toList());

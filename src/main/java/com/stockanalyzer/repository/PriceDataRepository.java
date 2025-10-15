@@ -21,6 +21,8 @@ public interface PriceDataRepository extends JpaRepository<PriceData, Long> {
 
     List<PriceData> findTop10BySymbolAndTradeDateLessThanEqualOrderByTradeDateDesc(String symbol, LocalDate tradeDate);
 
+    boolean existsByTradeDate(LocalDate tradeDate);
+
     @Query("SELECT p FROM PriceData p WHERE p.symbol = :symbol AND p.tradeDate BETWEEN :startDate AND :endDate ORDER BY p.tradeDate")
     List<PriceData> findHistoricalData(@Param("symbol") String symbol,
                                        @Param("startDate") LocalDate startDate,

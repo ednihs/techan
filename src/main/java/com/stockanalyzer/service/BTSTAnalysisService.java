@@ -52,7 +52,16 @@ public class BTSTAnalysisService {
     @Scheduled(cron = "0 0 18 * * MON-FRI", zone = "Asia/Kolkata")
     @Transactional
     public void runDailyAnalysis() {
-        LocalDate analysisDate = LocalDate.now();
+        executeAnalysis(LocalDate.now());
+    }
+
+    @Transactional
+    public List<BTSTAnalysis> runAnalysis(LocalDate date) {
+        LocalDate resolvedDate = DateUtils.resolveDateOrDefault(date, LocalDate.now());
+        return executeAnalysis(resolvedDate);
+    }
+
+    private List<BTSTAnalysis> executeAnalysis(LocalDate analysisDate) {
         LocalDate previousDate = analysisDate.minusDays(1);
         log.info("Running BTST analysis for {}", analysisDate);
         List<String> candidates = identifyDay1Candidates(previousDate);
@@ -67,9 +76,11 @@ public class BTSTAnalysisService {
         List<BTSTAnalysis> results = futures.stream()
                 .map(CompletableFuture::join)
                 .filter(result -> result != null && result.getConfidenceScore() != null && result.getConfidenceScore() >= confidenceThreshold)
+                .sorted((a, b) -> Double.compare(Optional.ofNullable(b.getConfidenceScore()).orElse(0.0), Optional.ofNullable(a.getConfidenceScore()).orElse(0.0)))
                 .collect(Collectors.toList());
         btstAnalysisRepository.saveAll(results);
         log.info("Stored {} BTST analyses", results.size());
+        return results;
     }
 
     public List<String> identifyDay1Candidates(LocalDate date) {
