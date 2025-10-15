@@ -1,0 +1,83 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: stock-analyzer
+  datasource:
+    jdbc-url: jdbc:mysql://localhost:3307/stock_analyzer_v1?createDatabaseIfNotExist=true
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: interOP@123
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+        order_inserts: true
+        order_updates: true
+        jdbc:
+          batch_size: 50
+          batch_versioned_data: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+fivepaisa:
+  api:
+    base-url: "https://openapi.5paisa.com/VendorsAPI/Service1.svc"
+    app-name: ${FIVEPAISA_APP_NAME:YOUR_APP_NAME}
+    client-code: ${FIVEPAISA_CLIENT_CODE:YOUR_CLIENT_CODE}
+    user-key: ${FIVEPAISA_USER_KEY:YOUR_USER_KEY}
+    encrypt-key: ${FIVEPAISA_ENCRYPT_KEY:YOUR_ENCRYPT_KEY}
+    password: ${FIVEPAISA_PASSWORD:YOUR_PASSWORD}
+    login-id: ${FIVEPAISA_CLIENT_CODE:YOUR_CLIENT_CODE}
+nse:
+  bhavcopy:
+    base-url: "https://nsearchives.nseindia.com/content/cm/"
+    file-pattern: "BhavCopy_NSE_CM_0_0_0_{date}_F_0000.csv.zip"
+    download-path: "./data/bhavcopy/"
+    retry-attempts: 3
+    retry-delay: 5000
+technical-analysis:
+  indicators:
+    rsi-period: 14
+    ema-short: 9
+    ema-long: 21
+    volume-sma: 20
+    atr-period: 14
+    lookback-days: 100
+btst:
+  analysis:
+    min-volume: 500000
+    min-value: 50000000
+    min-price: 10.0
+    max-gap-down: -1.5
+    min-gap-up: -0.5
+    confidence-threshold: 50.0
+logging:
+  level:
+    com.stockanalyzer: INFO
+    org.springframework.web: WARN
+    org.hibernate.SQL: WARN
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
