@@ -62,7 +62,7 @@ public class BTSTAnalysisService {
     }
 
     private List<BTSTAnalysis> executeAnalysis(LocalDate analysisDate) {
-        LocalDate previousDate = analysisDate.minusDays(1);
+        LocalDate previousDate = DateUtils.getPreviousTradingDay(analysisDate);
         log.info("Running BTST analysis for {}", analysisDate);
         List<String> candidates = identifyDay1Candidates(previousDate);
         List<CompletableFuture<BTSTAnalysis>> futures = candidates.stream()

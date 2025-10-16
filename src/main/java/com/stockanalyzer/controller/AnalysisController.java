@@ -53,7 +53,7 @@ public class AnalysisController {
         return ResponseEntity.ok(payload);
     }
 
-    @PostMapping("/btst/run")
+    @GetMapping("/btst/run")
     public ResponseEntity<List<BTSTRecommendationDTO>> runOnDemandAnalysis(
             @RequestParam(defaultValue = "1970-01-01") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         LocalDate resolvedDate = DateUtils.resolveDateOrDefault(date, LocalDate.now());

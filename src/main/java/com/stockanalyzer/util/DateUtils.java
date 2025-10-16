@@ -1,5 +1,6 @@
 package com.stockanalyzer.util;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 
 public final class DateUtils {
@@ -14,5 +15,15 @@ public final class DateUtils {
             return fallback;
         }
         return candidate;
+    }
+
+    public static LocalDate getPreviousTradingDay(LocalDate date) {
+        LocalDate previousDay = date.minusDays(0);
+        if (previousDay.getDayOfWeek() == DayOfWeek.SUNDAY) {
+            return previousDay.minusDays(2);
+        } else if (previousDay.getDayOfWeek() == DayOfWeek.SATURDAY) {
+            return previousDay.minusDays(1);
+        }
+        return previousDay;
     }
 }

@@ -81,8 +81,29 @@ public class BhavcopyService {
         return priceDataList;
     }
 
+    private BigDecimal parseBigDecimal(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        return new BigDecimal(value.trim());
+    }
+
+    private Long parseLong(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return 0L;
+        }
+        return Long.parseLong(value.trim());
+    }
+
+    private Integer parseInt(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return 0;
+        }
+        return Integer.parseInt(value.trim());
+    }
+
     private PriceData parseLine(String[] fields, LocalDate tradeDate) {
-        if (fields == null || fields.length < 26) {
+        if (fields == null || fields.length < 27) {
             return null;
         }
         String symbol = fields[7].trim();
@@ -90,17 +111,22 @@ public class BhavcopyService {
         if (!"EQ".equalsIgnoreCase(series)) {
             return null;
         }
-        return PriceData.builder()
-                .symbol(symbol)
-                .tradeDate(tradeDate)
-                .openPrice(new BigDecimal(fields[13]))
-                .highPrice(new BigDecimal(fields[14]))
-                .lowPrice(new BigDecimal(fields[15]))
-                .closePrice(new BigDecimal(fields[16]))
-                .prevClosePrice(new BigDecimal(fields[18]))
-                .volume(Long.parseLong(fields[24]))
-                .valueTraded(Long.parseLong(fields[25]))
-                .noOfTrades(Integer.parseInt(fields[26]))
-                .build();
+        try {
+            return PriceData.builder()
+                    .symbol(symbol)
+                    .tradeDate(tradeDate)
+                    .openPrice(parseBigDecimal(fields[14]))
+                    .highPrice(parseBigDecimal(fields[15]))
+                    .lowPrice(parseBigDecimal(fields[16]))
+                    .closePrice(parseBigDecimal(fields[17]))
+                    .prevClosePrice(parseBigDecimal(fields[19]))
+                    .volume(parseLong(fields[24]))
+                    .valueTraded(parseBigDecimal(fields[25]).longValue())
+                    .noOfTrades(parseInt(fields[26]))
+                    .build();
+        } catch (NumberFormatException e) {
+            log.warn("Skipping line for symbol {} due to number format error: {}", symbol, e.getMessage());
+            return null;
+        }
     }
 }

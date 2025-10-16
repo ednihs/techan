@@ -28,7 +28,7 @@ public class DataCollectionScheduler {
     @PostConstruct
     public void ensureRecentHistoryAvailable() {
         LocalDate today = LocalDate.now();
-        LocalDate endDate = today.minusDays(1);
+        LocalDate endDate = today.minusDays(0);
         LocalDate startDate = endDate.minusDays(LOOKBACK_DAYS - 1);
         for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
             if (date.getDayOfWeek() == DayOfWeek.SATURDAY || date.getDayOfWeek() == DayOfWeek.SUNDAY) {
