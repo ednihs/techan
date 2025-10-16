@@ -8,6 +8,8 @@ import com.stockanalyzer.repository.BTSTAnalysisRepository;
 import com.stockanalyzer.repository.PriceDataRepository;
 import com.stockanalyzer.repository.TechnicalIndicatorRepository;
 import com.stockanalyzer.service.RiskAssessmentService;
+import com.stockanalyzer.service.RealtimeAnalysisRepository;
+import com.stockanalyzer.service.RealtimeWeakHandsService;
 import com.stockanalyzer.service.RiskAssessmentService.GapRisk;
 import com.stockanalyzer.service.RiskAssessmentService.LiquidityRisk;
 import com.stockanalyzer.util.DateUtils;
@@ -22,12 +24,15 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -38,7 +43,10 @@ public class BTSTAnalysisService {
     private final TechnicalIndicatorRepository technicalIndicatorRepository;
     private final BTSTAnalysisRepository btstAnalysisRepository;
     private final RiskAssessmentService riskAssessmentService;
+    private final RealtimeAnalysisRepository realtimeAnalysisRepository;
     private final Executor analysisExecutor = Executors.newFixedThreadPool(8);
+
+    private final Map<LocalDate, List<String>> dayOneCandidateCache = new ConcurrentHashMap<>();
 
     @Value("${btst.analysis.min-volume:500000}")
     private long minVolume;
@@ -91,6 +99,48 @@ public class BTSTAnalysisService {
                 .map(PriceData::getSymbol)
                 .distinct()
                 .collect(Collectors.toList());
+    }
+
+    public List<String> identifyAndStoreBTSTCandidates(LocalDate date) {
+        List<String> candidates = identifyDay1Candidates(date);
+        dayOneCandidateCache.put(date, candidates);
+        return candidates;
+    }
+
+    public List<String> getYesterdayBTSTCandidates() {
+        LocalDate today = LocalDate.now();
+        LocalDate previous = DateUtils.getPreviousTradingDay(today);
+        if (previous == null) {
+            return Collections.emptyList();
+        }
+        return dayOneCandidateCache.computeIfAbsent(previous, this::identifyDay1Candidates);
+    }
+
+    public void generateRealtimeRecommendations(LocalDate date) {
+        List<RealtimeWeakHandsService.AfternoonAnalysis> signals =
+                realtimeAnalysisRepository.findAfternoonAnalysesWithBuySignal(date);
+        if (signals.isEmpty()) {
+            log.info("No realtime BTST signals generated for {}", date);
+            return;
+        }
+        signals.forEach(signal -> log.info("Realtime BUY {} score={} entry={} target={} sl={}",
+                signal.getSymbol(),
+                String.format("%.1f", signal.getWeakHandsScore()),
+                String.format("%.2f", signal.getEntryPrice()),
+                String.format("%.2f", signal.getTargetPrice()),
+                String.format("%.2f", signal.getStopLoss())));
+    }
+
+    public void refreshTopRecommendations(LocalDate date) {
+        List<RealtimeWeakHandsService.AfternoonAnalysis> signals =
+                realtimeAnalysisRepository.findAfternoonAnalysesWithBuySignal(date);
+        if (!signals.isEmpty()) {
+            log.info("Refreshed realtime recommendations for {} ({} signals)", date, signals.size());
+        }
+    }
+
+    public void validateRealtimeSignals(LocalDate date) {
+        log.info("Validating realtime signals for {}", date);
     }
 
     private boolean qualifiesAsDay1Candidate(PriceData priceData, LocalDate date) {
