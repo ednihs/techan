@@ -8,6 +8,16 @@ Intraday minute bars are sourced from the configured FivePaisa market-feed API v
 
 The service gracefully falls back to zeroed placeholders when the sandbox cannot reach the upstream API, so local development and tests can still execute without live market connectivity.
 
+### FivePaisa Authentication
+
+FivePaisa retired the legacy password-based `/authentication/login` endpoint. The service now follows the documented OAuth flow:
+
+1. **Interactive login** – open `https://dev-openapi.5paisa.com/WebVendorLogin/VLogin/Index` with your `VendorKey` and callback URL. After entering the client code, PAN/PIN, and OTP, copy the `RequestToken` that FivePaisa appends to the callback URL.
+2. **Configure the backend** – either set the `fivepaisa.api.request-token` property (environment variable or `application.yml`) or call `FivePaisaService.updateRequestToken(<token>)` at runtime.
+3. **Token exchange** – on startup or whenever `authenticate()` is invoked, the service posts the token to `/GetAccessToken`, caches the returned bearer token, and automatically refreshes headers for subsequent market-feed and historical requests.
+
+If no request token is configured, the service logs a warning and gracefully skips authentication so the rest of the application can continue to run in offline mode.
+
 ## Database Schema
 
 Schema migrations are managed with Flyway (see `src/main/resources/db/migration`). The realtime pipeline introduces the `intraday_data` table to store the captured bars:

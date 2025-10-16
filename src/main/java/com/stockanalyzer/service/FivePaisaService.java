@@ -41,23 +41,21 @@ public class FivePaisaService {
     @Value("${fivepaisa.api.app-name:demo}")
     private String appName;
 
-    @Value("${fivepaisa.api.user-key:demo}")
-    private String userKey;
-
     @Value("${fivepaisa.api.encrypt-key:demo}")
     private String encryptKey;
 
-    @Value("${fivepaisa.api.password:demo}")
-    private String password;
-
     @Value("${fivepaisa.api.login-id:demo}")
     private String loginId;
+
+    @Value("${fivepaisa.api.request-token:}")
+    private String initialRequestToken;
 
     private WebClient webClient;
 
     private final AtomicReference<String> bearerToken = new AtomicReference<>("");
     private final AtomicReference<String> refreshToken = new AtomicReference<>("");
     private final AtomicReference<String> feedToken = new AtomicReference<>("");
+    private final AtomicReference<String> requestToken = new AtomicReference<>("");
     private final AtomicReference<Instant> tokenExpiry = new AtomicReference<>(Instant.EPOCH);
 
     private final Object authMonitor = new Object();
@@ -71,6 +69,9 @@ public class FivePaisaService {
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
+        if (StringUtils.hasText(initialRequestToken)) {
+            requestToken.set(initialRequestToken.trim());
+        }
         authenticate();
     }
 
@@ -84,28 +85,27 @@ public class FivePaisaService {
                 return;
             }
 
-            if (!StringUtils.hasText(clientCode) || !StringUtils.hasText(loginId) || !StringUtils.hasText(password)
-                    || !StringUtils.hasText(appName) || !StringUtils.hasText(userKey) || !StringUtils.hasText(encryptKey)) {
-                log.warn("Skipping FivePaisa authentication because credentials are not fully configured");
+            if (!StringUtils.hasText(appName) || !StringUtils.hasText(encryptKey) || !StringUtils.hasText(loginId)) {
+                log.warn("Skipping FivePaisa authentication because mandatory credentials are missing (appName/loginId/encryptKey)");
+                return;
+            }
+
+            String currentRequestToken = requestToken.get();
+            if (!StringUtils.hasText(currentRequestToken)) {
+                log.warn("FivePaisa RequestToken not configured. Complete the OAuth login flow and call updateRequestToken() before attempting API calls.");
                 return;
             }
 
             Map<String, Object> head = new HashMap<>();
-            head.put("appName", appName);
-            head.put("appVer", "1.0");
-            head.put("key", userKey);
-            head.put("osName", "WEB");
-            head.put("requestCode", "5PLoginV4");
-            head.put("userId", loginId);
-            head.put("password", password);
-            head.put("encryptKey", encryptKey);
+            head.put("Key", appName);
 
             Map<String, Object> body = new HashMap<>();
-            body.put("ClientCode", clientCode);
-            body.put("Password", password);
+            body.put("RequestToken", currentRequestToken);
+            body.put("EncryKey", encryptKey);
             body.put("UserId", loginId);
-            body.put("AppName", appName);
-            body.put("AppSource", 3006);
+            if (StringUtils.hasText(clientCode)) {
+                body.put("ClientCode", clientCode);
+            }
 
             Map<String, Object> payload = new HashMap<>();
             payload.put("head", head);
@@ -113,7 +113,7 @@ public class FivePaisaService {
 
             try {
                 Mono<Map<String, Object>> responseMono = webClient.post()
-                        .uri("/authentication/login")
+                        .uri("/GetAccessToken")
                         .contentType(MediaType.APPLICATION_JSON)
                         .bodyValue(payload)
                         .retrieve()
@@ -133,8 +133,8 @@ public class FivePaisaService {
                 refreshToken.set(extractString(bodyMap.get("RefreshToken")));
                 feedToken.set(extractString(bodyMap.get("FeedToken")));
 
-                long expiresIn = parseLong(bodyMap.get("AccessTokenExpiry"), 600L);
-                tokenExpiry.set(Instant.now().plusSeconds(Math.max(expiresIn, 60L)));
+                Instant expiry = resolveExpiryInstant(bodyMap);
+                tokenExpiry.set(expiry);
 
                 this.webClient = this.webClient.mutate()
                         .defaultHeaders(headers -> {
@@ -150,6 +150,19 @@ public class FivePaisaService {
             } catch (Exception ex) {
                 log.warn("Failed to authenticate with FivePaisa for client {}: {}", clientCode, ex.getMessage());
             }
+        }
+    }
+
+    public void updateRequestToken(String newToken) {
+        if (!StringUtils.hasText(newToken)) {
+            return;
+        }
+        synchronized (authMonitor) {
+            requestToken.set(newToken.trim());
+            bearerToken.set("");
+            refreshToken.set("");
+            feedToken.set("");
+            tokenExpiry.set(Instant.EPOCH);
         }
     }
 
@@ -261,5 +274,13 @@ public class FivePaisaService {
             return target;
         }
         return Collections.emptyMap();
+    }
+
+    private Instant resolveExpiryInstant(Map<String, Object> bodyMap) {
+        long expiresIn = parseLong(bodyMap.get("AccessTokenExpiry"), -1L);
+        if (expiresIn <= 0) {
+            expiresIn = parseLong(bodyMap.get("ExpiresIn"), 600L);
+        }
+        return Instant.now().plusSeconds(Math.max(expiresIn, 60L));
     }
 }
