@@ -2,21 +2,27 @@ package com.stockanalyzer.service;
 
 import com.stockanalyzer.dto.HistoricalDataPoint;
 import com.stockanalyzer.dto.MarketFeedData;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 @Service
@@ -32,22 +38,126 @@ public class FivePaisaService {
     @Value("${fivepaisa.api.client-code:demo}")
     private String clientCode;
 
+    @Value("${fivepaisa.api.app-name:demo}")
+    private String appName;
+
+    @Value("${fivepaisa.api.user-key:demo}")
+    private String userKey;
+
+    @Value("${fivepaisa.api.encrypt-key:demo}")
+    private String encryptKey;
+
+    @Value("${fivepaisa.api.password:demo}")
+    private String password;
+
+    @Value("${fivepaisa.api.login-id:demo}")
+    private String loginId;
+
     private WebClient webClient;
+
+    private final AtomicReference<String> bearerToken = new AtomicReference<>("");
+    private final AtomicReference<String> refreshToken = new AtomicReference<>("");
+    private final AtomicReference<String> feedToken = new AtomicReference<>("");
+    private final AtomicReference<Instant> tokenExpiry = new AtomicReference<>(Instant.EPOCH);
+
+    private final Object authMonitor = new Object();
+
+    private static final Duration AUTH_TIMEOUT = Duration.ofSeconds(5);
+    private static final Duration TOKEN_EXPIRY_GRACE = Duration.ofMinutes(1);
 
     @PostConstruct
     public void init() {
-        this.webClient = webClientBuilder.baseUrl(baseUrl).build();
+        this.webClient = webClientBuilder
+                .baseUrl(baseUrl)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build();
         authenticate();
     }
 
     public void authenticate() {
-        log.info("Initializing FivePaisa client for code {}", clientCode);
+        if (hasValidToken()) {
+            return;
+        }
+
+        synchronized (authMonitor) {
+            if (hasValidToken()) {
+                return;
+            }
+
+            if (!StringUtils.hasText(clientCode) || !StringUtils.hasText(loginId) || !StringUtils.hasText(password)
+                    || !StringUtils.hasText(appName) || !StringUtils.hasText(userKey) || !StringUtils.hasText(encryptKey)) {
+                log.warn("Skipping FivePaisa authentication because credentials are not fully configured");
+                return;
+            }
+
+            Map<String, Object> head = new HashMap<>();
+            head.put("appName", appName);
+            head.put("appVer", "1.0");
+            head.put("key", userKey);
+            head.put("osName", "WEB");
+            head.put("requestCode", "5PLoginV4");
+            head.put("userId", loginId);
+            head.put("password", password);
+            head.put("encryptKey", encryptKey);
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("ClientCode", clientCode);
+            body.put("Password", password);
+            body.put("UserId", loginId);
+            body.put("AppName", appName);
+            body.put("AppSource", 3006);
+
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("head", head);
+            payload.put("body", body);
+
+            try {
+                Mono<Map<String, Object>> responseMono = webClient.post()
+                        .uri("/authentication/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .bodyValue(payload)
+                        .retrieve()
+                        .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {
+                        });
+
+                Map<String, Object> response = responseMono.blockOptional(AUTH_TIMEOUT).orElse(Collections.emptyMap());
+                Map<String, Object> bodyMap = asMap(response.get("body"));
+
+                String accessToken = extractString(bodyMap.get("AccessToken"));
+                if (!StringUtils.hasText(accessToken)) {
+                    log.warn("FivePaisa authentication response did not include an access token. Head: {}", asMap(response.get("head")));
+                    return;
+                }
+
+                bearerToken.set(accessToken);
+                refreshToken.set(extractString(bodyMap.get("RefreshToken")));
+                feedToken.set(extractString(bodyMap.get("FeedToken")));
+
+                long expiresIn = parseLong(bodyMap.get("AccessTokenExpiry"), 600L);
+                tokenExpiry.set(Instant.now().plusSeconds(Math.max(expiresIn, 60L)));
+
+                this.webClient = this.webClient.mutate()
+                        .defaultHeaders(headers -> {
+                            headers.setBearerAuth(accessToken);
+                            headers.add("clientCode", clientCode);
+                            if (StringUtils.hasText(feedToken.get())) {
+                                headers.add("feedToken", feedToken.get());
+                            }
+                        })
+                        .build();
+
+                log.info("FivePaisa authentication succeeded for client {}. Token valid until {}", clientCode, tokenExpiry.get());
+            } catch (Exception ex) {
+                log.warn("Failed to authenticate with FivePaisa for client {}: {}", clientCode, ex.getMessage());
+            }
+        }
     }
 
     public List<MarketFeedData> getMarketFeed(List<String> symbols) {
         if (symbols == null || symbols.isEmpty()) {
             return Collections.emptyList();
         }
+        ensureAuthenticated();
         try {
             Mono<List<Map<String, Object>>> response = webClient.post()
                     .uri("/marketfeed")
@@ -74,6 +184,7 @@ public class FivePaisaService {
         if (symbol == null) {
             return Collections.emptyList();
         }
+        ensureAuthenticated();
         try {
             Mono<List<Map<String, Object>>> response = webClient.post()
                     .uri("/historicaldata")
@@ -110,5 +221,45 @@ public class FivePaisaService {
                 .close(new BigDecimal(String.valueOf(payload.getOrDefault("close", "0"))))
                 .volume(Long.parseLong(String.valueOf(payload.getOrDefault("volume", "0"))))
                 .build();
+    }
+
+    private void ensureAuthenticated() {
+        if (!hasValidToken()) {
+            authenticate();
+        }
+    }
+
+    private boolean hasValidToken() {
+        Instant expiry = tokenExpiry.get();
+        return StringUtils.hasText(bearerToken.get()) && expiry != null && Instant.now().isBefore(expiry.minus(TOKEN_EXPIRY_GRACE));
+    }
+
+    private long parseLong(Object value, long defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException ex) {
+            return defaultValue;
+        }
+    }
+
+    private String extractString(Object value) {
+        if (value == null) {
+            return "";
+        }
+        String result = String.valueOf(value);
+        return "null".equalsIgnoreCase(result) ? "" : result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> asMap(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> target = new HashMap<>();
+            map.forEach((k, v) -> target.put(String.valueOf(k), v));
+            return target;
+        }
+        return Collections.emptyMap();
     }
 }
