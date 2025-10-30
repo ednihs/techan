@@ -3,15 +3,19 @@ package com.stockanalyzer.controller;
 import com.stockanalyzer.dto.BTSTCandidateDTO;
 import com.stockanalyzer.dto.BTSTDetailedAnalysisDTO;
 import com.stockanalyzer.dto.BTSTRecommendationDTO;
+import com.stockanalyzer.dto.RealtimeBTSTSignalDTO;
 import com.stockanalyzer.dto.TechnicalIndicatorDTO;
 import com.stockanalyzer.entity.BTSTAnalysis;
 import com.stockanalyzer.entity.TechnicalIndicator;
 import com.stockanalyzer.repository.BTSTAnalysisRepository;
 import com.stockanalyzer.repository.TechnicalIndicatorRepository;
 import com.stockanalyzer.service.BTSTAnalysisService;
+import com.stockanalyzer.repository.RealtimeAnalysisRepository;
+import com.stockanalyzer.service.RealtimeWeakHandsService;
 import com.stockanalyzer.service.RiskAssessmentService;
 import com.stockanalyzer.service.RiskAssessmentService.GapRisk;
 import com.stockanalyzer.service.RiskAssessmentService.LiquidityRisk;
+import com.stockanalyzer.service.TechnicalAnalysisService;
 import com.stockanalyzer.util.DateUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,7 +23,6 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,6 +42,8 @@ public class AnalysisController {
     private final BTSTAnalysisRepository btstAnalysisRepository;
     private final TechnicalIndicatorRepository technicalIndicatorRepository;
     private final RiskAssessmentService riskAssessmentService;
+    private final RealtimeAnalysisRepository realtimeAnalysisRepository;
+    private final TechnicalAnalysisService technicalAnalysisService;
 
     @GetMapping("/btst/recommendations")
     public ResponseEntity<List<BTSTRecommendationDTO>> getRecommendations(
@@ -49,6 +54,22 @@ public class AnalysisController {
                 .findByAnalysisDateAndRecommendationOrderByConfidenceScoreDesc(resolvedDate, recommendation)
                 .stream()
                 .map(this::toRecommendation)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(payload);
+    }
+
+    @GetMapping("/btst/realtime-signals")
+    public ResponseEntity<List<RealtimeBTSTSignalDTO>> getRealtimeSignals(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        LocalDate analysisDate = date != null ? date : LocalDate.now();
+        List<RealtimeWeakHandsService.AfternoonAnalysis> analyses =
+                realtimeAnalysisRepository.findAfternoonAnalysesWithBuySignal(analysisDate);
+        if (analyses.isEmpty()) {
+            return ResponseEntity.ok(List.of());
+        }
+        List<RealtimeBTSTSignalDTO> payload = analyses.stream()
+                .map(analysis -> toRealtimeSignalDto(analysis, analysisDate))
+                .sorted((a, b) -> Double.compare(b.getWeakHandsScore(), a.getWeakHandsScore()))
                 .collect(Collectors.toList());
         return ResponseEntity.ok(payload);
     }
@@ -94,6 +115,17 @@ public class AnalysisController {
         return indicator.map(this::toTechnicalDto).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/technical/run")
+    public ResponseEntity<List<TechnicalIndicatorDTO>> runOnDemandIndicatorCalculation(
+            @RequestParam(defaultValue = "1970-01-01") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        LocalDate resolvedDate = DateUtils.resolveDateOrDefault(date, LocalDate.now());
+        List<TechnicalIndicator> indicators = technicalAnalysisService.calculateIndicatorsForDate(resolvedDate);
+        List<TechnicalIndicatorDTO> payload = indicators.stream()
+                .map(this::toTechnicalDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(payload);
+    }
+
     private BTSTRecommendationDTO toRecommendation(BTSTAnalysis analysis) {
         return BTSTRecommendationDTO.builder()
                 .symbol(analysis.getSymbol())
@@ -106,6 +138,37 @@ public class AnalysisController {
                 .liquidityRiskLevel(analysis.getLiquidityRiskLevel())
                 .gapRiskLevel(analysis.getGapRiskLevel())
                 .build();
+    }
+
+    private RealtimeBTSTSignalDTO toRealtimeSignalDto(RealtimeWeakHandsService.AfternoonAnalysis analysis, LocalDate date) {
+        RealtimeBTSTSignalDTO dto = new RealtimeBTSTSignalDTO();
+        dto.setSymbol(analysis.getSymbol());
+        dto.setSector("UNKNOWN");
+        dto.setSignalTime(analysis.getAnalysisTime());
+        dto.setCurrentPrice(analysis.getCurrentPrice());
+        dto.setRetailIntensity(analysis.getRetailIntensity());
+        dto.setCumulativeDelta(analysis.getSessionCumulativeDelta());
+        dto.setAbsorptionQuality(analysis.isGoodAbsorption());
+        dto.setSupplyExhaustion(analysis.isSupplyExhausted());
+        dto.setWeakHandsScore(analysis.getWeakHandsScore());
+        dto.setEntryPrice(analysis.getEntryPrice());
+        dto.setTargetPrice(analysis.getTargetPrice());
+        dto.setStopLoss(analysis.getStopLoss());
+        dto.setRiskRewardRatio(analysis.getRiskRewardRatio());
+        dto.setPositionSizePercent(analysis.getPositionSizePercent());
+        RiskAssessmentService.LiquidityRisk liquidityRisk = riskAssessmentService.calculateLiquidityRisk(analysis.getSymbol(), date);
+        dto.setLiquidityRisk(formatRisk(liquidityRisk.getLevel(), liquidityRisk.getFactors()));
+        RiskAssessmentService.GapRisk gapRisk = riskAssessmentService.calculateGapRisk(analysis.getSymbol(), date, null);
+        dto.setGapRisk(formatRisk(gapRisk.getLevel(), gapRisk.getFactors()));
+        dto.setConfidenceScore((int) Math.round(Math.min(100, analysis.getWeakHandsScore())));
+        return dto;
+    }
+
+    private String formatRisk(String level, String factors) {
+        if (factors == null || factors.isBlank()) {
+            return level;
+        }
+        return level + " - " + factors;
     }
 
     private BTSTDetailedAnalysisDTO toDetailedDto(BTSTAnalysis analysis, LiquidityRisk liquidityRisk, GapRisk gapRisk) {
@@ -149,6 +212,12 @@ public class AnalysisController {
                 .priceStrength(indicator.getPriceStrength())
                 .volumeStrength(indicator.getVolumeStrength())
                 .deliveryStrength(indicator.getDeliveryStrength())
+                .macd(indicator.getMacd())
+                .macdSignal(indicator.getMacdSignal())
+                .macdHistogram(indicator.getMacdHistogram())
+                .bollingerUpper(indicator.getBollingerUpper())
+                .bollingerLower(indicator.getBollingerLower())
+                .bollingerWidth(indicator.getBollingerWidth())
                 .build();
     }
 }

@@ -24,7 +24,7 @@ public class RiskAssessmentService {
     public LiquidityRisk calculateLiquidityRisk(String symbol, LocalDate date) {
         try {
             PriceData current = priceDataRepository.findBySymbolAndTradeDate(symbol, date).orElse(null);
-            List<PriceData> history = priceDataRepository.findTop10BySymbolAndTradeDateLessThanEqualOrderByTradeDateDesc(symbol, date);
+            List<PriceData> history = priceDataRepository.findTop20BySymbolAndTradeDateLessThanOrderByTradeDateDesc(symbol, date);
             if (current == null || history.size() < 5) {
                 return new LiquidityRisk("HIGH", "Insufficient data for liquidity assessment");
             }
@@ -71,7 +71,7 @@ public class RiskAssessmentService {
     public GapRisk calculateGapRisk(String symbol, LocalDate date, BTSTAnalysis analysis) {
         try {
             PriceData current = priceDataRepository.findBySymbolAndTradeDate(symbol, date).orElse(null);
-            List<PriceData> history = priceDataRepository.findTop10BySymbolAndTradeDateLessThanEqualOrderByTradeDateDesc(symbol, date.minusDays(1));
+            List<PriceData> history = priceDataRepository.findTop20BySymbolAndTradeDateLessThanOrderByTradeDateDesc(symbol, date.minusDays(1));
             if (current == null || history.size() < 5) {
                 return new GapRisk("MEDIUM", "Insufficient historical gaps");
             }
