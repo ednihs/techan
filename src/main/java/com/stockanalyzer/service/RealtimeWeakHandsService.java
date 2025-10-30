@@ -4,6 +4,7 @@ import com.stockanalyzer.entity.IntradayData;
 import com.stockanalyzer.entity.PriceData;
 import com.stockanalyzer.repository.IntradayDataRepository;
 import com.stockanalyzer.repository.PriceDataRepository;
+import com.stockanalyzer.repository.RealtimeAnalysisRepository;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

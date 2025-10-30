@@ -10,11 +10,12 @@ import com.stockanalyzer.entity.TechnicalIndicator;
 import com.stockanalyzer.repository.BTSTAnalysisRepository;
 import com.stockanalyzer.repository.TechnicalIndicatorRepository;
 import com.stockanalyzer.service.BTSTAnalysisService;
-import com.stockanalyzer.service.RealtimeAnalysisRepository;
+import com.stockanalyzer.repository.RealtimeAnalysisRepository;
 import com.stockanalyzer.service.RealtimeWeakHandsService;
 import com.stockanalyzer.service.RiskAssessmentService;
 import com.stockanalyzer.service.RiskAssessmentService.GapRisk;
 import com.stockanalyzer.service.RiskAssessmentService.LiquidityRisk;
+import com.stockanalyzer.service.TechnicalAnalysisService;
 import com.stockanalyzer.util.DateUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +23,6 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -43,6 +43,7 @@ public class AnalysisController {
     private final TechnicalIndicatorRepository technicalIndicatorRepository;
     private final RiskAssessmentService riskAssessmentService;
     private final RealtimeAnalysisRepository realtimeAnalysisRepository;
+    private final TechnicalAnalysisService technicalAnalysisService;
 
     @GetMapping("/btst/recommendations")
     public ResponseEntity<List<BTSTRecommendationDTO>> getRecommendations(
@@ -112,6 +113,17 @@ public class AnalysisController {
         LocalDate resolvedDate = DateUtils.resolveDateOrDefault(date, LocalDate.now());
         Optional<TechnicalIndicator> indicator = technicalIndicatorRepository.findBySymbolAndCalculationDate(symbol, resolvedDate);
         return indicator.map(this::toTechnicalDto).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/technical/run")
+    public ResponseEntity<List<TechnicalIndicatorDTO>> runOnDemandIndicatorCalculation(
+            @RequestParam(defaultValue = "1970-01-01") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        LocalDate resolvedDate = DateUtils.resolveDateOrDefault(date, LocalDate.now());
+        List<TechnicalIndicator> indicators = technicalAnalysisService.calculateIndicatorsForDate(resolvedDate);
+        List<TechnicalIndicatorDTO> payload = indicators.stream()
+                .map(this::toTechnicalDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(payload);
     }
 
     private BTSTRecommendationDTO toRecommendation(BTSTAnalysis analysis) {
@@ -200,6 +212,12 @@ public class AnalysisController {
                 .priceStrength(indicator.getPriceStrength())
                 .volumeStrength(indicator.getVolumeStrength())
                 .deliveryStrength(indicator.getDeliveryStrength())
+                .macd(indicator.getMacd())
+                .macdSignal(indicator.getMacdSignal())
+                .macdHistogram(indicator.getMacdHistogram())
+                .bollingerUpper(indicator.getBollingerUpper())
+                .bollingerLower(indicator.getBollingerLower())
+                .bollingerWidth(indicator.getBollingerWidth())
                 .build();
     }
 }

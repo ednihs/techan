@@ -44,7 +44,7 @@ public class RealtimeBTSTScheduler {
         log.info("Identified {} BTST day-1 candidates for {}", candidates.size(), today.plusDays(1));
     }
 
-    @Scheduled(cron = "0 */3 9-15 * * MON-FRI", zone = "Asia/Kolkata")
+    @Scheduled(cron = "0 */3 0-23 * * MON-FRI", zone = "Asia/Kolkata")
     public void collectRealtimeData() {
         if (!isMarketOpen()) {
             return;
@@ -73,7 +73,7 @@ public class RealtimeBTSTScheduler {
         }
     }
 
-    @Scheduled(cron = "0 0 14 * * MON-FRI", zone = "Asia/Kolkata")
+    @Scheduled(cron = "0 00 14 * * MON-FRI", zone = "Asia/Kolkata")
     public void generateAfternoonSignals() {
         LocalDate today = LocalDate.now();
         for (String symbol : btstAnalysisService.getYesterdayBTSTCandidates()) {

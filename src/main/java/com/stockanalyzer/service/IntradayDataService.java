@@ -14,6 +14,7 @@ import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -28,7 +29,10 @@ public class IntradayDataService {
         if (symbols == null || symbols.isEmpty()) {
             return;
         }
-        List<MarketFeedData> feeds = fivePaisaService.getMarketFeed(symbols);
+        List<FivePaisaService.MarketFeedRequestItem> requestItems = symbols.stream()
+                .map(symbol -> new FivePaisaService.MarketFeedRequestItem("N", "C", symbol, "", "0", ""))
+                .collect(Collectors.toList());
+        List<MarketFeedData> feeds = fivePaisaService.getMarketFeed(requestItems);
         if (feeds == null || feeds.isEmpty()) {
             log.debug("No market feed data returned for intraday collection");
             return;

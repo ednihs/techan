@@ -18,7 +18,7 @@ public final class DateUtils {
     }
 
     public static LocalDate getPreviousTradingDay(LocalDate date) {
-        LocalDate previousDay = date.minusDays(0);
+        LocalDate previousDay = date.minusDays(1);
         if (previousDay.getDayOfWeek() == DayOfWeek.SUNDAY) {
             return previousDay.minusDays(2);
         } else if (previousDay.getDayOfWeek() == DayOfWeek.SATURDAY) {

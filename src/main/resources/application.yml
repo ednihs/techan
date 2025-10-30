@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 8081
 spring:
   application:
     name: stock-analyzer
@@ -39,12 +39,13 @@ spring:
 fivepaisa:
   api:
     base-url: "https://openapi.5paisa.com/VendorsAPI/Service1.svc"
-    app-name: ${FIVEPAISA_APP_NAME:YOUR_APP_NAME}
-    client-code: ${FIVEPAISA_CLIENT_CODE:YOUR_CLIENT_CODE}
-    user-key: ${FIVEPAISA_USER_KEY:YOUR_USER_KEY}
-    encrypt-key: ${FIVEPAISA_ENCRYPT_KEY:YOUR_ENCRYPT_KEY}
-    password: ${FIVEPAISA_PASSWORD:YOUR_PASSWORD}
-    login-id: ${FIVEPAISA_CLIENT_CODE:YOUR_CLIENT_CODE}
+    app-name: ${FIVEPAISA_APP_NAME:5P50003277}
+    client-code: ${FIVEPAISA_CLIENT_CODE:50003277}
+    user-key: ${FIVEPAISA_USER_KEY:fAGoVxCEjkYVN0UKIQfRdUKruwAIqc6c}
+    encrypt-key: ${FIVEPAISA_ENCRYPT_KEY:EwGIpQIwjAMjzeKR2baglWR5aduY4F3X}
+    password: ${FIVEPAISA_PASSWORD:vMvI75gWq2F}
+    login-id: ${FIVEPAISA_CLIENT_CODE:50003277}
+    user-id: ${FIVEPAISA_CLIENT_CODE:xw3Qrntmt5h}
 nse:
   bhavcopy:
     base-url: "https://nsearchives.nseindia.com/content/cm/"
@@ -63,7 +64,7 @@ technical-analysis:
 btst:
   analysis:
     min-volume: 500000
-    min-value: 50000000
+    min-value: 10000000
     min-price: 10.0
     max-gap-down: -1.5
     min-gap-up: -0.5

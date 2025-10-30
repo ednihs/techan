@@ -1,4 +1,4 @@
-package com.stockanalyzer.service;
+package com.stockanalyzer.repository;
 
 import com.stockanalyzer.service.RealtimeWeakHandsService.AfternoonAnalysis;
 import com.stockanalyzer.service.RealtimeWeakHandsService.MidSessionAnalysis;

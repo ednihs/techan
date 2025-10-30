@@ -17,4 +17,10 @@ public class TechnicalIndicatorDTO {
     private Double priceStrength;
     private Double volumeStrength;
     private Double deliveryStrength;
+    private Double macd;
+    private Double macdSignal;
+    private Double macdHistogram;
+    private Double bollingerUpper;
+    private Double bollingerLower;
+    private Double bollingerWidth;
 }

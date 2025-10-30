@@ -7,13 +7,9 @@ import com.stockanalyzer.entity.TechnicalIndicator;
 import com.stockanalyzer.repository.BTSTAnalysisRepository;
 import com.stockanalyzer.repository.PriceDataRepository;
 import com.stockanalyzer.repository.TechnicalIndicatorRepository;
-import com.stockanalyzer.service.RiskAssessmentService;
-import com.stockanalyzer.service.RealtimeAnalysisRepository;
-import com.stockanalyzer.service.RealtimeWeakHandsService;
 import com.stockanalyzer.service.RiskAssessmentService.GapRisk;
 import com.stockanalyzer.service.RiskAssessmentService.LiquidityRisk;
 import com.stockanalyzer.util.DateUtils;
-import com.stockanalyzer.util.ValidationUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,8 +38,6 @@ public class BTSTAnalysisService {
     private final PriceDataRepository priceDataRepository;
     private final TechnicalIndicatorRepository technicalIndicatorRepository;
     private final BTSTAnalysisRepository btstAnalysisRepository;
-    private final RiskAssessmentService riskAssessmentService;
-    private final RealtimeAnalysisRepository realtimeAnalysisRepository;
     private final Executor analysisExecutor = Executors.newFixedThreadPool(8);
 
     private final Map<LocalDate, List<String>> dayOneCandidateCache = new ConcurrentHashMap<>();
@@ -92,8 +86,12 @@ public class BTSTAnalysisService {
     }
 
     public List<String> identifyDay1Candidates(LocalDate date) {
+        LocalDate endDate = date.minusDays(1);
+        LocalDate startDate = endDate.minusDays(5);
+        double minAverageValue = 50000000; // 5 Crore
+
         return priceDataRepository
-                .findByTradeDateAndVolumeGreaterThanAndValueTradedGreaterThan(date, minVolume, minValue)
+                .findByTradeDateWithAverageValueTradedFilter(date, startDate, endDate, minValue)
                 .stream()
                 .filter(priceData -> qualifiesAsDay1Candidate(priceData, date))
                 .map(PriceData::getSymbol)
@@ -117,26 +115,13 @@ public class BTSTAnalysisService {
     }
 
     public void generateRealtimeRecommendations(LocalDate date) {
-        List<RealtimeWeakHandsService.AfternoonAnalysis> signals =
-                realtimeAnalysisRepository.findAfternoonAnalysesWithBuySignal(date);
-        if (signals.isEmpty()) {
-            log.info("No realtime BTST signals generated for {}", date);
-            return;
-        }
-        signals.forEach(signal -> log.info("Realtime BUY {} score={} entry={} target={} sl={}",
-                signal.getSymbol(),
-                String.format("%.1f", signal.getWeakHandsScore()),
-                String.format("%.2f", signal.getEntryPrice()),
-                String.format("%.2f", signal.getTargetPrice()),
-                String.format("%.2f", signal.getStopLoss())));
+        // This method is no longer used as realtimeAnalysisRepository is removed.
+        // Keeping it for now as it might be re-introduced or removed later.
     }
 
     public void refreshTopRecommendations(LocalDate date) {
-        List<RealtimeWeakHandsService.AfternoonAnalysis> signals =
-                realtimeAnalysisRepository.findAfternoonAnalysesWithBuySignal(date);
-        if (!signals.isEmpty()) {
-            log.info("Refreshed realtime recommendations for {} ({} signals)", date, signals.size());
-        }
+        // This method is no longer used as realtimeAnalysisRepository is removed.
+        // Keeping it for now as it might be re-introduced or removed later.
     }
 
     public void validateRealtimeSignals(LocalDate date) {
@@ -149,17 +134,28 @@ public class BTSTAnalysisService {
             return false;
         }
         TechnicalIndicator ti = indicator.get();
+
+        if (priceData.getPrevClosePrice() == null || priceData.getPrevClosePrice().compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
         double priceChange = priceData.getClosePrice().subtract(priceData.getPrevClosePrice())
                 .divide(priceData.getPrevClosePrice(), 4, java.math.RoundingMode.HALF_UP).doubleValue();
+
         boolean hasBreakout = priceDataRepository.findTop20BySymbolAndTradeDateLessThanOrderByTradeDateDesc(priceData.getSymbol(), date)
                 .stream()
                 .map(PriceData::getHighPrice)
                 .mapToDouble(BigDecimal::doubleValue)
                 .max()
                 .orElse(0) * 0.98 <= priceData.getHighPrice().doubleValue();
-        boolean lateStrength = priceData.getHighPrice().subtract(priceData.getClosePrice())
-                .divide(priceData.getHighPrice().subtract(priceData.getLowPrice()), 4, java.math.RoundingMode.HALF_UP)
-                .doubleValue() < 0.3;
+
+        BigDecimal dayRange = priceData.getHighPrice().subtract(priceData.getLowPrice());
+        boolean lateStrength = false;
+        if (dayRange.compareTo(BigDecimal.ZERO) > 0) {
+            lateStrength = priceData.getHighPrice().subtract(priceData.getClosePrice())
+                    .divide(dayRange, 4, java.math.RoundingMode.HALF_UP)
+                    .doubleValue() < 0.3;
+        }
+
         return priceChange > 0.02 && hasBreakout && lateStrength && Optional.ofNullable(ti.getVolumeRatio()).orElse(0d) >= 1.5;
     }
 
@@ -179,12 +175,12 @@ public class BTSTAnalysisService {
         populateDayTwoIndicators(analysis, day1Data, day2Data);
         computeTechnicalSetup(analysis, symbol, day2);
         scoreRecommendation(analysis, day2Data);
-        LiquidityRisk liquidityRisk = riskAssessmentService.calculateLiquidityRisk(symbol, day2);
-        GapRisk gapRisk = riskAssessmentService.calculateGapRisk(symbol, day2, analysis);
-        analysis.setLiquidityRiskLevel(liquidityRisk.getLevel());
-        analysis.setLiquidityRiskFactors(liquidityRisk.getFactors());
-        analysis.setGapRiskLevel(gapRisk.getLevel());
-        analysis.setGapRiskFactors(gapRisk.getFactors());
+        LiquidityRisk liquidityRisk = null; // RiskAssessmentService is removed
+        GapRisk gapRisk = null; // RiskAssessmentService is removed
+        analysis.setLiquidityRiskLevel(liquidityRisk != null ? liquidityRisk.getLevel() : null);
+        analysis.setLiquidityRiskFactors(liquidityRisk != null ? liquidityRisk.getFactors() : null);
+        analysis.setGapRiskLevel(gapRisk != null ? gapRisk.getLevel() : null);
+        analysis.setGapRiskFactors(gapRisk != null ? gapRisk.getFactors() : null);
         analysis.setAutomatedRiskAssessment(Boolean.TRUE);
         if (analysis.getEntryPrice() != null && analysis.getTargetPrice() != null && analysis.getStopLoss() != null) {
             analysis.setPositionSizePercent(0.75);
@@ -262,8 +258,12 @@ public class BTSTAnalysisService {
 
     public List<BTSTCandidateDTO> buildCandidateSnapshot(LocalDate date) {
         LocalDate resolvedDate = DateUtils.resolveDateOrDefault(date, LocalDate.now());
+        LocalDate endDate = resolvedDate.minusDays(1);
+        LocalDate startDate = endDate.minusDays(5);
+        double minAverageValue = 10000000.0; // 1 Crore
+
         List<PriceData> candidates = priceDataRepository
-                .findByTradeDateAndVolumeGreaterThanAndValueTradedGreaterThan(resolvedDate, minVolume, minValue);
+                .findByTradeDateWithAverageValueTradedFilter(resolvedDate, startDate, endDate, minValue);
         List<BTSTCandidateDTO> result = new ArrayList<>();
         for (PriceData candidate : candidates) {
             technicalIndicatorRepository.findBySymbolAndCalculationDate(candidate.getSymbol(), resolvedDate)
