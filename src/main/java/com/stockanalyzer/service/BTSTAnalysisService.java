@@ -88,7 +88,7 @@ public class BTSTAnalysisService {
     public List<String> identifyDay1Candidates(LocalDate date) {
         LocalDate endDate = date.minusDays(1);
         LocalDate startDate = endDate.minusDays(5);
-        double minAverageValue = 50000000; // 5 Crore
+        double minAverageValue = 10000000; // 5 Crore
 
         return priceDataRepository
                 .findByTradeDateWithAverageValueTradedFilter(date, startDate, endDate, minValue)

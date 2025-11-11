@@ -6,7 +6,10 @@ import com.FivePaisa.service.Properties;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockanalyzer.dto.HistoricalDataPoint;
+import com.stockanalyzer.dto.HoldingDTO;
 import com.stockanalyzer.dto.MarketFeedData;
+import com.stockanalyzer.dto.OrderRequestDTO;
+import com.stockanalyzer.dto.OrderResponseDTO;
 import jakarta.annotation.PostConstruct;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -26,12 +29,16 @@ import org.springframework.web.reactive.function.client.WebClient;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -40,12 +47,15 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import java.util.Optional;
+
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class FivePaisaService {
 
+    private final ScripMasterService scripMasterService;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final String BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -222,6 +232,7 @@ public class FivePaisaService {
         }
     }
 
+    @SuppressWarnings("unchecked")
     public List<MarketFeedData> getMarketFeed(List<MarketFeedRequestItem> requestItems) {
         if (requestItems == null || requestItems.isEmpty()) {
             return Collections.emptyList();
@@ -249,11 +260,11 @@ public class FivePaisaService {
         }
 
         RestClient apis = new RestClient(config, properties);
-
+        ZoneId istZone = ZoneId.of("Asia/Kolkata");
         JSONObject requestJson = new JSONObject();
         requestJson.put("Count", requestItems.size());
         requestJson.put("ClientLoginType", 0);
-        requestJson.put("LastRequestTime", "/Date(" + Instant.now().toEpochMilli() + ")/");
+        requestJson.put("LastRequestTime", "/Date(" +ZonedDateTime.now(istZone).with(LocalTime.MIN).toInstant().toEpochMilli() + ")/");
         requestJson.put("RefreshRate", "H");
 
         JSONArray marketFeedDataList = new JSONArray();
@@ -295,31 +306,189 @@ public class FivePaisaService {
         return Collections.emptyList();
     }
 
-    public List<HistoricalDataPoint> getHistoricalData(String symbol, LocalDate fromDate, LocalDate toDate) {
-        if (symbol == null) {
-            return Collections.emptyList();
-        }
+    public List<com.stockanalyzer.entity.PriceData> getHistoricalData(int scripCode, String interval, LocalDate fromDate, LocalDate toDate) {
         ensureAuthenticated();
+        String url = String.format("https://openapi.5paisa.com/V2/historical/M/D/%d/%s?from=%s&end=%s",
+                scripCode, interval, fromDate.toString(), toDate.toString());
+
         try {
-            String responseJson = webClient.post()
-                    .uri("/historicaldata")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(Map.of(
-                            "symbol", symbol,
-                            "from", fromDate.toString(),
-                            "to", toDate.toString()))
+            String responseJson = webClient.get()
+                    .uri(url)
                     .retrieve()
                     .bodyToMono(String.class)
                     .block();
 
             Map<String, Object> responseMap = parseJson(responseJson);
-            List<Map<String, Object>> payload = (List<Map<String, Object>>) responseMap.get("body");
-
-            return payload.stream().map(this::mapHistoricalPoint).collect(Collectors.toList());
-        } catch (Exception ex) {
-            log.warn("Falling back to synthetic history for {} due to: {}", symbol, ex.getMessage());
-            return Collections.emptyList();
+            if (responseMap.containsKey("data")) {
+                Map<String, Object> dataMap = asMap(responseMap.get("data"));
+                if (dataMap.containsKey("candles")) {
+                    @SuppressWarnings("unchecked")
+                    List<List<Object>> candles = (List<List<Object>>) dataMap.get("candles");
+                    return candles.stream()
+                            .map(this::mapCandleToPriceData)
+                            .collect(Collectors.toList());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch historical data for scripCode {}", scripCode, e);
         }
+        return new ArrayList<>();
+    }
+
+    private com.stockanalyzer.entity.PriceData mapCandleToPriceData(List<Object> candle) {
+        DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+        LocalDateTime timestamp = LocalDateTime.parse(String.valueOf(candle.get(0)), formatter);
+
+        return com.stockanalyzer.entity.PriceData.builder()
+                .tradeDate(timestamp.toLocalDate())
+                .createdAt(timestamp)
+                .openPrice(new BigDecimal(String.valueOf(candle.get(1))))
+                .highPrice(new BigDecimal(String.valueOf(candle.get(2))))
+                .lowPrice(new BigDecimal(String.valueOf(candle.get(3))))
+                .closePrice(new BigDecimal(String.valueOf(candle.get(4))))
+                .volume(((Number) candle.get(5)).longValue())
+                .build();
+    }
+
+    public List<HoldingDTO> getHoldings() {
+        ensureAuthenticated();
+        log.info("Fetching holdings for client {}", clientCode);
+
+        try {
+            Map<String, Object> requestBody = Map.of(
+                    "head", Map.of("key", userKey),
+                    "body", Map.of("ClientCode", clientCode)
+            );
+
+            String responseJson = webClient.post()
+                    .uri("/V3/Holding")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+
+            Map<String, Object> responseMap = parseJson(responseJson);
+            Map<String, Object> bodyMap = asMap(responseMap.get("body"));
+            Object data = bodyMap.get("Data");
+
+            if (data instanceof List) {
+                List<Map<String, Object>> holdingsData = new ArrayList<>();
+                for (Object item : (List<?>) data) {
+                    holdingsData.add(asMap(item));
+                }
+                return holdingsData.stream()
+                        .map(this::mapHoldingFromApiResponse)
+                        .collect(Collectors.toList());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch holdings", e);
+        }
+        return Collections.emptyList();
+    }
+
+    public OrderResponseDTO placeOrder(OrderRequestDTO orderRequest) {
+        ensureAuthenticated();
+        log.info("Placing order for client {}: {}", clientCode, orderRequest);
+
+        try {
+            String scripCode = scripMasterService.getScripCode(orderRequest.getSymbol());
+            if (scripCode == null) {
+                return OrderResponseDTO.builder().status("Failed").message("Invalid symbol").build();
+            }
+
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("head", Map.of("key", userKey));
+            Map<String, Object> body = new HashMap<>();
+            body.put("ClientCode", clientCode);
+            body.put("Exchange", orderRequest.getExchange());
+            body.put("ExchangeType", "C"); // Assuming Cash
+            body.put("ScripCode", scripCode);
+            body.put("Price", orderRequest.getPrice().doubleValue());
+            body.put("OrderType", orderRequest.getTransactionType());
+            body.put("Qty", orderRequest.getQuantity());
+            body.put("DisQty", 0);
+            body.put("IsIntraday", "DELIVERY".equalsIgnoreCase(orderRequest.getProductType()));
+            body.put("iOrderValidity", 0); // Day order
+            body.put("AHPlaced", "N");
+            requestBody.put("body", body);
+
+            String responseJson = webClient.post()
+                    .uri("/V1/PlaceOrderRequest")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+
+            Map<String, Object> responseMap = parseJson(responseJson);
+            Map<String, Object> responseBody = asMap(responseMap.get("body"));
+
+            return OrderResponseDTO.builder()
+                    .orderId(String.valueOf(responseBody.get("BrokerOrderID")))
+                    .status(String.valueOf(responseBody.get("Status")))
+                    .message(String.valueOf(responseBody.get("Message")))
+                    .build();
+
+        } catch (Exception e) {
+            log.warn("Failed to place order", e);
+            return OrderResponseDTO.builder().status("Failed").message(e.getMessage()).build();
+        }
+    }
+
+    public OrderResponseDTO cancelOrder(String orderId) {
+        ensureAuthenticated();
+        log.info("Cancelling order {} for client {}", orderId, clientCode);
+
+        try {
+            Map<String, Object> requestBody = Map.of(
+                    "head", Map.of("key", userKey),
+                    "body", Map.of("ClientCode", clientCode, "BrokerOrderID", orderId)
+            );
+
+            // The exact endpoint for cancel order is not confirmed from docs, assuming this based on pattern
+            String responseJson = webClient.post()
+                    .uri("/V1/CancelOrderRequest")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+
+            Map<String, Object> responseMap = parseJson(responseJson);
+            Map<String, Object> responseBody = asMap(responseMap.get("body"));
+
+            return OrderResponseDTO.builder()
+                    .orderId(orderId)
+                    .status(String.valueOf(responseBody.get("Status")))
+                    .message(String.valueOf(responseBody.get("Message")))
+                    .build();
+        } catch (Exception e) {
+            log.warn("Failed to cancel order", e);
+            return OrderResponseDTO.builder().orderId(orderId).status("Failed").message(e.getMessage()).build();
+        }
+    }
+
+    private String getScripCodeForSymbol(String symbol) {
+        Map<String, String> symbolToScrip = new HashMap<>();
+        symbolToScrip.put("TCS", "2885");
+        symbolToScrip.put("RELIANCE", "2475");
+        symbolToScrip.put("INFY", "1594");
+        return symbolToScrip.get(symbol.toUpperCase());
+    }
+
+    private HoldingDTO mapHoldingFromApiResponse(Map<String, Object> payload) {
+        BigDecimal avgPrice = new BigDecimal(String.valueOf(payload.getOrDefault("AvgRate", "0")));
+        BigDecimal lastPrice = new BigDecimal(String.valueOf(payload.getOrDefault("CurrentPrice", "0")));
+        int quantity = Integer.parseInt(String.valueOf(payload.getOrDefault("Quantity", "0")));
+        BigDecimal pnl = lastPrice.subtract(avgPrice).multiply(new BigDecimal(quantity));
+
+        return HoldingDTO.builder()
+                .symbol(String.valueOf(payload.getOrDefault("Symbol", "UNKNOWN")))
+                .exchange(String.valueOf(payload.getOrDefault("Exch", "")))
+                .quantity(quantity)
+                .averagePrice(avgPrice)
+                .lastTradedPrice(lastPrice)
+                .pnl(pnl)
+                .dayPnl(BigDecimal.ZERO) // The API doesn't seem to provide day's PnL
+                .build();
     }
 
     private String resolveTotpCode() {
@@ -405,6 +574,9 @@ public class FivePaisaService {
         return MarketFeedData.builder()
                 .symbol(String.valueOf(payload.getOrDefault("Symbol", "UNKNOWN")))
                 .lastTradedPrice(new BigDecimal(String.valueOf(payload.getOrDefault("LastRate", "0"))))
+                .high(new BigDecimal(String.valueOf(payload.getOrDefault("High", "0"))))
+                .low(new BigDecimal(String.valueOf(payload.getOrDefault("Low", "0"))))
+                .previousClose(new BigDecimal(String.valueOf(payload.getOrDefault("PClose", "0"))))
                 .changePercent(new BigDecimal(String.valueOf(payload.getOrDefault("ChgPer", "0"))))
                 .volume(Long.parseLong(String.valueOf(payload.getOrDefault("TotalQty", "0"))))
                 .build();
@@ -461,10 +633,7 @@ public class FivePaisaService {
     }
 
     private Instant resolveExpiryInstant(Map<String, Object> bodyMap) {
-        long expiresIn = parseLong(bodyMap.get("AccessTokenExpiry"), -1L);
-        if (expiresIn <= 0) {
-            expiresIn = parseLong(bodyMap.get("ExpiresIn"), 6000L);
-        }
-        return Instant.now().plusSeconds(Math.max(expiresIn, 60L));
+        ZoneId istZone = ZoneId.of("Asia/Kolkata");
+        return ZonedDateTime.now(istZone).with(LocalTime.MAX).toInstant();
     }
 }

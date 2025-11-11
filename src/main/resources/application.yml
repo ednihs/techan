@@ -32,6 +32,11 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
     validate-on-migrate: true
+    mvc:
+      throw-exception-if-no-handler-found: true
+    web:
+      resources:
+        add-mappings: false
   jackson:
     serialization:
       write-dates-as-timestamps: false

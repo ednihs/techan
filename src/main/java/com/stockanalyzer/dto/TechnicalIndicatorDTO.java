@@ -1,12 +1,21 @@
 package com.stockanalyzer.dto;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class TechnicalIndicatorDTO {
     private String symbol;
+    private LocalDate calculationDate;
+    private LocalDateTime createdAt;
     private Double rsi14;
     private Double ema9;
     private Double ema21;

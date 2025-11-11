@@ -12,4 +12,7 @@ public class MarketFeedData {
     private BigDecimal lastTradedPrice;
     private BigDecimal changePercent;
     private long volume;
+    private BigDecimal high;
+    private BigDecimal low;
+    private BigDecimal previousClose;
 }
