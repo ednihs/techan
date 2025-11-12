@@ -147,10 +147,25 @@ public class TechnicalAnalysisService {
         long startTime = System.currentTimeMillis();
         List<PriceData> history = priceDataRepository
                 .findHistoricalData(symbol, asOfDate.minusDays(lookbackDays), asOfDate);
+
+        TechnicalIndicator indicator = calculateIndicatorsFromHistory(history, asOfDate);
+
+        if (indicator != null) {
+            System.out.println("number of indicators updated so far "+(calculated++) +" and time taken"+ (System.currentTimeMillis() - startTime) );
+            return technicalIndicatorRepository.save(indicator);
+        }
+        return null;
+    }
+
+    public TechnicalIndicator calculateIndicatorsFromHistory(List<PriceData> history, LocalDate asOfDate) {
         if (!ValidationUtils.hasEnoughData(history, 20)) {
-            log.debug("Insufficient history for {} on {}", symbol, asOfDate);
+            log.debug("Insufficient history for date {}", asOfDate);
             return null;
         }
+
+        PriceData latestData = history.get(history.size() - 1);
+        String symbol = latestData.getSymbol();
+
         double[] close = history.stream().map(PriceData::getClosePrice).mapToDouble(BigDecimal::doubleValue).toArray();
         double[] high = history.stream().map(PriceData::getHighPrice).mapToDouble(BigDecimal::doubleValue).toArray();
         double[] low = history.stream().map(PriceData::getLowPrice).mapToDouble(BigDecimal::doubleValue).toArray();
@@ -170,9 +185,8 @@ public class TechnicalAnalysisService {
         computeBollinger(close, indicator);
         computeVwap(history, indicator);
         computeCustomStrength(history, indicator);
-        System.out.println("number of indicators updated so far "+(calculated++) +" and time taken"+ (System.currentTimeMillis() - startTime) );
 
-        return technicalIndicatorRepository.save(indicator);
+        return indicator;
     }
 
     public TechnicalIndicator calculateTechnicalIndicators(PriceData latestPriceData, List<PriceData> history) {

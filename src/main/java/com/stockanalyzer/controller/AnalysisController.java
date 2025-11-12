@@ -169,7 +169,7 @@ public class AnalysisController {
     @GetMapping("/commodities/crudeoil/indicators")
     public void getCrudeOilIndicators(
             HttpServletResponse response,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) throws IOException {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) throws IOException, CsvDataTypeMismatchException, CsvRequiredFieldEmptyException {
 
         log.info("GET /commodities/crudeoil/indicators called with date: {}", date);
         LocalDate resolvedDate = (date == null) ? LocalDate.now() : date;
@@ -177,25 +177,17 @@ public class AnalysisController {
         // For now, we are hardcoding the interval to 15 minutes as requested.
         List<TechnicalIndicatorDTO> indicators = commodityAnalysisService.getCrudeOilIndicators("15m", resolvedDate);
 
-        String txtFileName = "crudeoil_indicators.txt";
-        response.setContentType("text/plain");
-        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + txtFileName + "\"");
+        String csvFileName = "crudeoil_indicators.csv";
+        response.setContentType("text/csv");
+        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + csvFileName + "\"");
 
-        // Write header
-        response.getWriter().write("symbol|calculationDate|rsi14|ema9|ema21|sma20\n");
+        StatefulBeanToCsv<TechnicalIndicatorDTO> writer = new StatefulBeanToCsvBuilder<TechnicalIndicatorDTO>(response.getWriter())
+                .withQuotechar('\"')
+                .withSeparator(',')
+                .withOrderedResults(false)
+                .build();
 
-        // Write data
-        for (TechnicalIndicatorDTO dto : indicators) {
-            String line = String.join("|",
-                    dto.getSymbol(),
-                    dto.getCalculationDate().toString(),
-                    String.valueOf(dto.getRsi14()),
-                    String.valueOf(dto.getEma9()),
-                    String.valueOf(dto.getEma21()),
-                    String.valueOf(dto.getSma20())
-            );
-            response.getWriter().write(line + "\n");
-        }
+        writer.write(indicators);
     }
 
     @GetMapping(value = "/indicators/all", produces = "text/csv")
