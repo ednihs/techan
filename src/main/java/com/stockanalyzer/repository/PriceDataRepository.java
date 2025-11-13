@@ -15,6 +15,13 @@ public interface PriceDataRepository extends JpaRepository<PriceData, Long> {
     Optional<PriceData>
     findBySymbolAndTradeDate(String symbol, LocalDate tradeDate);
 
+    Optional<PriceData> findTopBySymbolAndTradeDateBetweenOrderByClosePriceDesc(String symbol, LocalDate startDate, LocalDate endDate);
+    Optional<PriceData> findTopBySymbolAndTradeDateBetweenOrderByClosePriceAsc(String symbol, LocalDate startDate, LocalDate endDate);
+    List<PriceData> findTop5BySymbolAndTradeDateLessThanEqualOrderByTradeDateDesc(String symbol, LocalDate date);
+
+    @Query("SELECT MAX(p.tradeDate) FROM PriceData p")
+    Optional<LocalDate> findLatestTradeDate();
+
     List<PriceData> findBySymbolInAndTradeDate(List<String> symbols, LocalDate tradeDate);
 
     List<PriceData> findTop20BySymbolAndTradeDateLessThanOrderByTradeDateDesc(String symbol, LocalDate tradeDate);

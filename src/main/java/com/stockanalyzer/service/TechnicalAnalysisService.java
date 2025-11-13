@@ -25,6 +25,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -59,7 +60,6 @@ public class TechnicalAnalysisService {
 
         // Check if asOfDate is today and time is before 15:30 IST
         ZoneId istZone = ZoneId.of("Asia/Kolkata");
-        ZonedDateTime nowIst = ZonedDateTime.now(istZone);
         /*if (asOfDate.equals(nowIst.toLocalDate()) && nowIst.toLocalTime().isBefore(LocalTime.of(16, 45))) {
             log.info("Market is open. Fetching live data...");
             fetchAndSaveLivePriceData(asOfDate);
@@ -185,8 +185,130 @@ public class TechnicalAnalysisService {
         computeBollinger(close, indicator);
         computeVwap(history, indicator);
         computeCustomStrength(history, indicator);
+        computeIntradayFade(latestData, indicator);
+        compute52WeekHighLow(symbol, asOfDate, indicator);
+
+        getPreviousDayData(symbol, asOfDate).ifPresent(prevDayData -> {
+            indicator.setPrevDayOpen(prevDayData.getOpenPrice().floatValue());
+            indicator.setPrevDayHigh(prevDayData.getHighPrice().floatValue());
+            indicator.setPrevDayLow(prevDayData.getLowPrice().floatValue());
+            indicator.setPrevDayClose(prevDayData.getClosePrice().floatValue());
+
+            technicalIndicatorRepository.findBySymbolAndCalculationDate(symbol, prevDayData.getTradeDate()).ifPresent(prevIndicator -> {
+                indicator.setRsi14PrevDay(prevIndicator.getRsi14() != null ? prevIndicator.getRsi14().floatValue() : null);
+                indicator.setMacdHistogramPrevDay(prevIndicator.getMacdHistogram() != null ? prevIndicator.getMacdHistogram().floatValue() : null);
+            });
+
+            computePivotPoints(indicator);
+        });
+
+        computeCloseVelocity5d(symbol, asOfDate, indicator);
+        derivePricePositionAndMomentum(indicator);
+        setDataCompleteness(indicator);
+        computeDeliveryStrengthTrend(symbol, asOfDate, indicator);
 
         return indicator;
+    }
+
+    private void setDataCompleteness(TechnicalIndicator indicator) {
+        List<Object> fields = Arrays.asList(
+                indicator.getWeek52High(), indicator.getWeek52Low(), indicator.getDaysSince52wHigh(),
+                indicator.getIntradayFadePct(), indicator.getCloseVelocity5d(), indicator.getPrevDayOpen(),
+                indicator.getPrevDayHigh(), indicator.getPrevDayLow(), indicator.getPrevDayClose(),
+                indicator.getRsi14PrevDay(), indicator.getMacdHistogramPrevDay(), indicator.getPivotPoint(),
+                indicator.getResistance1(), indicator.getResistance2(), indicator.getSupport1(), indicator.getSupport2()
+        );
+
+        long nullCount = fields.stream().filter(java.util.Objects::isNull).count();
+
+        if (nullCount == 0) {
+            indicator.setDataCompleteness("FULL");
+        } else if (nullCount < fields.size() / 2) {
+            indicator.setDataCompleteness("PARTIAL");
+        } else {
+            indicator.setDataCompleteness("MINIMAL");
+        }
+    }
+
+    private void computePivotPoints(TechnicalIndicator indicator) {
+        if (indicator.getPrevDayHigh() == null || indicator.getPrevDayLow() == null || indicator.getPrevDayClose() == null) {
+            return;
+        }
+
+        float high = indicator.getPrevDayHigh();
+        float low = indicator.getPrevDayLow();
+        float close = indicator.getPrevDayClose();
+
+        float pivotPoint = (high + low + close) / 3;
+        indicator.setPivotPoint(pivotPoint);
+
+        float r1 = (pivotPoint * 2) - low;
+        float r2 = pivotPoint + (high - low);
+        indicator.setResistance1(r1);
+        indicator.setResistance2(r2);
+
+        float s1 = (pivotPoint * 2) - high;
+        float s2 = pivotPoint - (high - low);
+        indicator.setSupport1(s1);
+        indicator.setSupport2(s2);
+    }
+
+    private void derivePricePositionAndMomentum(TechnicalIndicator indicator) {
+        if (indicator.getCloseVelocity5d() != null) {
+            // This is a simplification. A true acceleration would compare velocity over time.
+            // For now, positive is accelerating, negative is decelerating.
+            if (indicator.getCloseVelocity5d() > 0.1) {
+                indicator.setMomentumDirection("ACCELERATING");
+            } else if (indicator.getCloseVelocity5d() < -0.1) {
+                indicator.setMomentumDirection("DECELERATING");
+            } else {
+                indicator.setMomentumDirection("STABLE");
+            }
+        }
+    }
+
+    private void computeCloseVelocity5d(String symbol, LocalDate asOfDate, TechnicalIndicator indicator) {
+        List<PriceData> last5Days = priceDataRepository.findTop5BySymbolAndTradeDateLessThanEqualOrderByTradeDateDesc(symbol, asOfDate);
+        if (last5Days.size() < 5) {
+            return;
+        }
+
+        double totalPercentageChange = 0;
+        for (int i = 0; i < 4; i++) {
+            PriceData currentDay = last5Days.get(i);
+            PriceData prevDay = last5Days.get(i + 1);
+            double change = (currentDay.getClosePrice().doubleValue() - prevDay.getClosePrice().doubleValue()) / prevDay.getClosePrice().doubleValue();
+            totalPercentageChange += change;
+        }
+        indicator.setCloseVelocity5d((float) (totalPercentageChange / 4 * 100));
+    }
+
+    private Optional<PriceData> getPreviousDayData(String symbol, LocalDate date) {
+        return priceDataRepository.findTop20BySymbolAndTradeDateLessThanOrderByTradeDateDesc(symbol, date)
+                .stream()
+                .findFirst();
+    }
+
+    private void compute52WeekHighLow(String symbol, LocalDate asOfDate, TechnicalIndicator indicator) {
+        LocalDate startDate = asOfDate.minusYears(1);
+        priceDataRepository.findTopBySymbolAndTradeDateBetweenOrderByClosePriceDesc(symbol, startDate, asOfDate)
+                .ifPresent(priceData -> {
+                    indicator.setWeek52High(priceData.getClosePrice().floatValue());
+                    indicator.setDaysSince52wHigh((int) java.time.temporal.ChronoUnit.DAYS.between(priceData.getTradeDate(), asOfDate));
+                });
+        priceDataRepository.findTopBySymbolAndTradeDateBetweenOrderByClosePriceAsc(symbol, startDate, asOfDate)
+                .ifPresent(priceData -> indicator.setWeek52Low(priceData.getClosePrice().floatValue()));
+    }
+
+    private void computeIntradayFade(PriceData latestData, TechnicalIndicator indicator) {
+        if (latestData.getHighPrice() != null && latestData.getClosePrice() != null && latestData.getClosePrice().compareTo(BigDecimal.ZERO) != 0) {
+            BigDecimal high = latestData.getHighPrice();
+            BigDecimal close = latestData.getClosePrice();
+            BigDecimal fade = high.subtract(close)
+                    .divide(close, 4, java.math.RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100));
+            indicator.setIntradayFadePct(fade.floatValue());
+        }
     }
 
     public TechnicalIndicator calculateTechnicalIndicators(PriceData latestPriceData, List<PriceData> history) {
@@ -200,7 +322,10 @@ public class TechnicalAnalysisService {
         double[] low = history.stream().map(PriceData::getLowPrice).mapToDouble(BigDecimal::doubleValue).toArray();
         double[] volume = history.stream().mapToDouble(pd -> Optional.ofNullable(pd.getVolume()).orElse(0L)).toArray();
 
-        TechnicalIndicator indicator = new TechnicalIndicator();
+        TechnicalIndicator indicator = technicalIndicatorRepository
+                .findBySymbolAndCalculationDate(latestPriceData.getSymbol(), latestPriceData.getTradeDate())
+                .orElseGet(TechnicalIndicator::new);
+
         indicator.setSymbol(latestPriceData.getSymbol());
         indicator.setCalculationDate(latestPriceData.getTradeDate());
 
@@ -212,6 +337,27 @@ public class TechnicalAnalysisService {
         computeBollinger(close, indicator);
         computeVwap(history, indicator);
         computeCustomStrength(history, indicator);
+        computeIntradayFade(latestPriceData, indicator);
+        compute52WeekHighLow(latestPriceData.getSymbol(), latestPriceData.getTradeDate(), indicator);
+
+        getPreviousDayData(latestPriceData.getSymbol(), latestPriceData.getTradeDate()).ifPresent(prevDayData -> {
+            indicator.setPrevDayOpen(prevDayData.getOpenPrice().floatValue());
+            indicator.setPrevDayHigh(prevDayData.getHighPrice().floatValue());
+            indicator.setPrevDayLow(prevDayData.getLowPrice().floatValue());
+            indicator.setPrevDayClose(prevDayData.getClosePrice().floatValue());
+
+            technicalIndicatorRepository.findBySymbolAndCalculationDate(latestPriceData.getSymbol(), prevDayData.getTradeDate()).ifPresent(prevIndicator -> {
+                indicator.setRsi14PrevDay(prevIndicator.getRsi14() != null ? prevIndicator.getRsi14().floatValue() : null);
+                indicator.setMacdHistogramPrevDay(prevIndicator.getMacdHistogram() != null ? prevIndicator.getMacdHistogram().floatValue() : null);
+            });
+
+            computePivotPoints(indicator);
+        });
+
+        computeCloseVelocity5d(latestPriceData.getSymbol(), latestPriceData.getTradeDate(), indicator);
+        derivePricePositionAndMomentum(indicator);
+        setDataCompleteness(indicator);
+        computeDeliveryStrengthTrend(latestPriceData.getSymbol(), latestPriceData.getTradeDate(), indicator);
 
         return indicator;
     }
@@ -376,6 +522,28 @@ public class TechnicalAnalysisService {
         dto.setBollingerLower(latestIndicator.getBollingerLower());
         dto.setBollingerWidth(latestIndicator.getBollingerWidth());
 
+        dto.setWeek52High(latestIndicator.getWeek52High());
+        dto.setWeek52Low(latestIndicator.getWeek52Low());
+        dto.setDaysSince52wHigh(latestIndicator.getDaysSince52wHigh());
+        dto.setIntradayFadePct(latestIndicator.getIntradayFadePct());
+        dto.setCloseVelocity5d(latestIndicator.getCloseVelocity5d());
+        dto.setPrevDayOpen(latestIndicator.getPrevDayOpen());
+        dto.setPrevDayHigh(latestIndicator.getPrevDayHigh());
+        dto.setPrevDayLow(latestIndicator.getPrevDayLow());
+        dto.setPrevDayClose(latestIndicator.getPrevDayClose());
+        dto.setRsi14PrevDay(latestIndicator.getRsi14PrevDay());
+        dto.setMacdHistogramPrevDay(latestIndicator.getMacdHistogramPrevDay());
+        dto.setPivotPoint(latestIndicator.getPivotPoint());
+        dto.setResistance1(latestIndicator.getResistance1());
+        dto.setResistance2(latestIndicator.getResistance2());
+        dto.setSupport1(latestIndicator.getSupport1());
+        dto.setSupport2(latestIndicator.getSupport2());
+        dto.setPricePositionStage(latestIndicator.getPricePositionStage());
+        dto.setMomentumDirection(latestIndicator.getMomentumDirection());
+        dto.setDataCompleteness(latestIndicator.getDataCompleteness());
+        dto.setDeliveryStrength5dAvg(latestIndicator.getDeliveryStrength5dAvg());
+        dto.setDeliveryStrengthTrend(latestIndicator.getDeliveryStrengthTrend());
+
         dto.setOpen(priceData.getOpenPrice());
         dto.setHigh(priceData.getHighPrice());
         dto.setLow(priceData.getLowPrice());
@@ -385,6 +553,9 @@ public class TechnicalAnalysisService {
         dto.setResistanceLevels(calculateResistanceLevels(priceData, latestIndicator));
         dto.setEarlyBirdRecommendations(detectEarlyBirdOpportunities(symbol, priceData, historicalIndicators));
         dto.setHistoricalIndicators(historicalIndicators.stream().map(this::mapToDTO).collect(Collectors.toList()));
+
+        calculateAndSetDynamicPivotDistances(dto, priceData, latestIndicator);
+        deriveDynamicPricePosition(dto);
 
         return dto;
     }
@@ -413,6 +584,27 @@ public class TechnicalAnalysisService {
                 .bollingerUpper(indicator.getBollingerUpper())
                 .bollingerLower(indicator.getBollingerLower())
                 .bollingerWidth(indicator.getBollingerWidth())
+                .week52High(indicator.getWeek52High())
+                .week52Low(indicator.getWeek52Low())
+                .daysSince52wHigh(indicator.getDaysSince52wHigh())
+                .intradayFadePct(indicator.getIntradayFadePct())
+                .closeVelocity5d(indicator.getCloseVelocity5d())
+                .prevDayOpen(indicator.getPrevDayOpen())
+                .prevDayHigh(indicator.getPrevDayHigh())
+                .prevDayLow(indicator.getPrevDayLow())
+                .prevDayClose(indicator.getPrevDayClose())
+                .rsi14PrevDay(indicator.getRsi14PrevDay())
+                .macdHistogramPrevDay(indicator.getMacdHistogramPrevDay())
+                .pivotPoint(indicator.getPivotPoint())
+                .resistance1(indicator.getResistance1())
+                .resistance2(indicator.getResistance2())
+                .support1(indicator.getSupport1())
+                .support2(indicator.getSupport2())
+                .pricePositionStage(indicator.getPricePositionStage())
+                .momentumDirection(indicator.getMomentumDirection())
+                .dataCompleteness(indicator.getDataCompleteness())
+                .deliveryStrength5dAvg(indicator.getDeliveryStrength5dAvg())
+                .deliveryStrengthTrend(indicator.getDeliveryStrengthTrend())
                 .build();
     }
 
@@ -510,10 +702,36 @@ public class TechnicalAnalysisService {
                     dto.setBollingerLower(latestIndicator.getBollingerLower());
                     dto.setBollingerWidth(latestIndicator.getBollingerWidth());
 
+                    // Manually map new fields
+                    dto.setWeek52High(latestIndicator.getWeek52High());
+                    dto.setWeek52Low(latestIndicator.getWeek52Low());
+                    dto.setDaysSince52wHigh(latestIndicator.getDaysSince52wHigh());
+                    dto.setIntradayFadePct(latestIndicator.getIntradayFadePct());
+                    dto.setCloseVelocity5d(latestIndicator.getCloseVelocity5d());
+                    dto.setPrevDayOpen(latestIndicator.getPrevDayOpen());
+                    dto.setPrevDayHigh(latestIndicator.getPrevDayHigh());
+                    dto.setPrevDayLow(latestIndicator.getPrevDayLow());
+                    dto.setPrevDayClose(latestIndicator.getPrevDayClose());
+                    dto.setRsi14PrevDay(latestIndicator.getRsi14PrevDay());
+                    dto.setMacdHistogramPrevDay(latestIndicator.getMacdHistogramPrevDay());
+                    dto.setPivotPoint(latestIndicator.getPivotPoint());
+                    dto.setResistance1(latestIndicator.getResistance1());
+                    dto.setResistance2(latestIndicator.getResistance2());
+                    dto.setSupport1(latestIndicator.getSupport1());
+                    dto.setSupport2(latestIndicator.getSupport2());
+                    dto.setPricePositionStage(latestIndicator.getPricePositionStage());
+                    dto.setMomentumDirection(latestIndicator.getMomentumDirection());
+                    dto.setDataCompleteness(latestIndicator.getDataCompleteness());
+                    dto.setDeliveryStrength5dAvg(latestIndicator.getDeliveryStrength5dAvg());
+                    dto.setDeliveryStrengthTrend(latestIndicator.getDeliveryStrengthTrend());
+
                     dto.setOpen(priceData.getOpenPrice());
                     dto.setHigh(priceData.getHighPrice());
                     dto.setLow(priceData.getLowPrice());
                     dto.setClose(priceData.getClosePrice());
+
+                    calculateAndSetDynamicPivotDistances(dto, priceData, latestIndicator);
+                    deriveDynamicPricePosition(dto);
 
                     return dto;
                 })
@@ -521,11 +739,83 @@ public class TechnicalAnalysisService {
                 .collect(Collectors.toList());
     }
 
+    private void calculateAndSetDynamicPivotDistances(EnrichedTechnicalIndicatorDTO dto, PriceData priceData, TechnicalIndicator indicator) {
+        if (indicator.getPivotPoint() == null || priceData.getClosePrice() == null || priceData.getClosePrice().floatValue() == 0) {
+            return;
+        }
+
+        float close = priceData.getClosePrice().floatValue();
+        float pivot = indicator.getPivotPoint();
+
+        dto.setPctFromPivot((close - pivot) / pivot * 100);
+
+        if (indicator.getResistance1() != null) {
+            dto.setPctToResistance1((indicator.getResistance1() - close) / close * 100);
+        }
+        if (indicator.getResistance2() != null) {
+            dto.setPctToResistance2((indicator.getResistance2() - close) / close * 100);
+        }
+        if (indicator.getSupport1() != null) {
+            dto.setPctToSupport1((indicator.getSupport1() - close) / close * 100);
+        }
+        if (indicator.getSupport2() != null) {
+            dto.setPctToSupport2((close - indicator.getSupport2()) / close * 100);
+        }
+    }
+
+    private void deriveDynamicPricePosition(EnrichedTechnicalIndicatorDTO dto) {
+        if (dto.getPctFromPivot() != null) {
+            float pctFromPivot = dto.getPctFromPivot();
+            if (pctFromPivot < -1) {
+                dto.setPricePositionStage("BELOW_PIVOT");
+            } else if (pctFromPivot >= -1 && pctFromPivot <= 1) {
+                dto.setPricePositionStage("AT_PIVOT");
+            } else if (pctFromPivot > 1 && pctFromPivot <= 3) {
+                dto.setPricePositionStage("EARLY_STAGE");
+            } else if (pctFromPivot > 3 && pctFromPivot <= 5) {
+                dto.setPricePositionStage("MID_STAGE");
+            } else {
+                dto.setPricePositionStage("LATE_STAGE");
+            }
+        }
+    }
+
+    private void computeDeliveryStrengthTrend(String symbol, LocalDate asOfDate, TechnicalIndicator indicator) {
+        List<TechnicalIndicator> last5DaysIndicators = technicalIndicatorRepository.findTop5BySymbolAndCalculationDateLessThanEqualOrderByCalculationDateDesc(symbol, asOfDate);
+
+        if (last5DaysIndicators.size() < 2) { // Need at least 2 days to determine a trend
+            indicator.setDeliveryStrengthTrend("STABLE");
+            return;
+        }
+
+        double average = last5DaysIndicators.stream()
+                .map(TechnicalIndicator::getDeliveryStrength)
+                .filter(Objects::nonNull)
+                .mapToDouble(Double::doubleValue)
+                .average()
+                .orElse(0.0);
+        indicator.setDeliveryStrength5dAvg((float) average);
+
+        Double latestStrength = last5DaysIndicators.get(0).getDeliveryStrength();
+        Double previousStrength = last5DaysIndicators.get(1).getDeliveryStrength();
+
+        if (latestStrength != null && previousStrength != null) {
+            if (latestStrength > previousStrength) {
+                indicator.setDeliveryStrengthTrend("INCREASING");
+            } else if (latestStrength < previousStrength) {
+                indicator.setDeliveryStrengthTrend("DECREASING");
+            } else {
+                indicator.setDeliveryStrengthTrend("STABLE");
+            }
+        } else {
+            indicator.setDeliveryStrengthTrend("STABLE");
+        }
+    }
+
     @Transactional
     public void scheduledFetchAndSaveLivePriceData() {
         ZoneId istZone = ZoneId.of("Asia/Kolkata");
         ZonedDateTime nowIst = ZonedDateTime.now(istZone);
-        LocalTime currentTime = nowIst.toLocalTime();
 
         // Run only during market hours (9:15 AM to 3:30 PM IST)
        // if ( fo("Running scheduled job to fetch and save live price data.");

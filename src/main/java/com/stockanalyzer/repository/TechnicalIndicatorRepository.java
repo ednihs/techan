@@ -24,4 +24,6 @@ public interface TechnicalIndicatorRepository extends JpaRepository<TechnicalInd
      List<TechnicalIndicator> findEnrichedTechnicalIndicators(@Param("date") LocalDate date, @Param("symbols") List<String> symbols);
 
     List<TechnicalIndicator> findBySymbolAndCalculationDateBetweenOrderByCalculationDateDesc(String symbol, LocalDate startDate, LocalDate endDate);
+
+    List<TechnicalIndicator> findTop5BySymbolAndCalculationDateLessThanEqualOrderByCalculationDateDesc(String symbol, LocalDate date);
 }
