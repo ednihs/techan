@@ -19,7 +19,7 @@ import java.time.LocalDate;
 @Slf4j
 public class DataCollectionScheduler {
 
-    private static final int LOOKBACK_DAYS = 100;
+    private static final int LOOKBACK_DAYS = 400;
 
     private final BhavcopyService bhavcopyService;
     private final TechnicalAnalysisService technicalAnalysisService;
@@ -28,17 +28,18 @@ public class DataCollectionScheduler {
     @PostConstruct
     public void ensureRecentHistoryAvailable() {
         LocalDate today = LocalDate.now();
-        LocalDate endDate = today.minusDays(0);
-        LocalDate startDate = endDate.minusDays(LOOKBACK_DAYS - 1);
-        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+        LocalDate startDate = priceDataRepository.findLatestTradeDate()
+                .orElse(today.minusDays(LOOKBACK_DAYS));
+        //startDate = today.minusDays(LOOKBACK_DAYS);
+
+        for (LocalDate date = startDate.plusDays(1); !date.isAfter(today); date = date.plusDays(1)) {
             if (date.getDayOfWeek() == DayOfWeek.SATURDAY || date.getDayOfWeek() == DayOfWeek.SUNDAY) {
                 continue;
             }
-            if (priceDataRepository.existsByTradeDate(date)) {
-                continue;
+            if (!priceDataRepository.existsByTradeDate(date)) {
+                log.info("Missing price data for {}. Attempting backfill.", date);
+                bhavcopyService.downloadAndProcess(date);
             }
-            log.info("Missing price data for {}. Attempting backfill.", date);
-            bhavcopyService.downloadAndProcess(date);
         }
     }
 
