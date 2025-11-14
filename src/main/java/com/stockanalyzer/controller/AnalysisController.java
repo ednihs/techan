@@ -26,12 +26,14 @@ import com.opencsv.bean.StatefulBeanToCsvBuilder;
 import com.opencsv.exceptions.CsvDataTypeMismatchException;
 import com.opencsv.exceptions.CsvRequiredFieldEmptyException;
 import com.stockanalyzer.service.CommodityAnalysisService;
+import com.stockanalyzer.service.IndicatorExportService;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -55,6 +57,7 @@ public class AnalysisController {
     private final RealtimeAnalysisRepository realtimeAnalysisRepository;
     private final TechnicalAnalysisService technicalAnalysisService;
     private final CommodityAnalysisService commodityAnalysisService;
+    private final IndicatorExportService indicatorExportService;
 
     @GetMapping("/btst/recommendations")
     public ResponseEntity<List<BTSTRecommendationDTO>> getRecommendations(
@@ -225,6 +228,24 @@ public class AnalysisController {
         log.info("GET /fetch-live-data called");
         technicalAnalysisService.scheduledFetchAndSaveLivePriceData();
         return ResponseEntity.ok("Live data fetch triggered successfully.");
+    }
+
+    @PostMapping("/indicators/export")
+    public ResponseEntity<String> exportIndicators(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        log.info("POST /indicators/export called with date: {}", date);
+        LocalDate resolvedDate = (date == null) ? LocalDate.now() : date;
+        indicatorExportService.exportIndicatorsForDate(resolvedDate);
+        return ResponseEntity.ok("Indicator export process started for date: " + resolvedDate);
+    }
+
+    @PostMapping("/indicators/export-csv")
+    public ResponseEntity<String> exportIndicatorsToCsv(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        log.info("POST /indicators/export-csv called with date: {}", date);
+        LocalDate resolvedDate = (date == null) ? LocalDate.now() : date;
+        indicatorExportService.exportIndicatorsToCsvForDate(resolvedDate);
+        return ResponseEntity.ok("Indicator CSV export process started for date: " + resolvedDate);
     }
 
     private BTSTRecommendationDTO toRecommendation(BTSTAnalysis analysis) {

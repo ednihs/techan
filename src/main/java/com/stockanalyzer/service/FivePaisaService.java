@@ -5,6 +5,8 @@ import com.FivePaisa.config.AppConfig;
 import com.FivePaisa.service.Properties;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stockanalyzer.dto.AccessTokenRequest;
+import com.stockanalyzer.dto.AccessTokenResponse;
 import com.stockanalyzer.dto.HistoricalDataPoint;
 import com.stockanalyzer.dto.HoldingDTO;
 import com.stockanalyzer.dto.MarketFeedData;
@@ -25,6 +27,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -58,7 +61,6 @@ public class FivePaisaService {
     private final ScripMasterService scripMasterService;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
-    private static final String BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
     private final WebClient.Builder webClientBuilder;
 
@@ -67,6 +69,18 @@ public class FivePaisaService {
 
     @Value("${fivepaisa.api.client-code:demo}")
     private String clientCode;
+
+    // New Properties for OAuth
+    @Value("${fivepaisa.app.key}")
+    private String appKey;
+    @Value("${fivepaisa.app.encrypt_key}")
+    private String appEncryptKey;
+    @Value("${fivepaisa.app.user_id}")
+    private String appUserId;
+    @Value("${fivepaisa.app.redirect_url}")
+    private String redirectUrl;
+
+    // --- End of new properties ---
 
     @Value("${fivepaisa.api.app-name:demo}")
     private String appName;
@@ -119,7 +133,6 @@ public class FivePaisaService {
     private WebClient webClient;
 
     private final AtomicReference<String> bearerToken = new AtomicReference<>("");
-    private final AtomicReference<String> feedToken = new AtomicReference<>("");
     private final AtomicReference<Instant> tokenExpiry = new AtomicReference<>(Instant.EPOCH);
 
     private final Object authMonitor = new Object();
@@ -150,11 +163,21 @@ public class FivePaisaService {
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
-        authenticate(null);
+        // The old automatic login is removed
+        // authenticate(null);
     }
 
-    public void authenticate(String totp) {
+    public String getLoginUrl() {
+        return String.format("https://dev-openapi.5paisa.com/WebVendorLogin/VLogin/Index?VendorKey=%s&ResponseURL=%s", appKey, redirectUrl);
+    }
+
+    public void generateAccessToken(String requestToken) {
+        if (requestToken == null || requestToken.isBlank()) {
+            throw new IllegalArgumentException("Request token cannot be empty.");
+        }
+
         if (hasValidToken()) {
+            log.info("Access token is still valid. Skipping generation.");
             return;
         }
 
@@ -162,73 +185,75 @@ public class FivePaisaService {
             if (hasValidToken()) {
                 return;
             }
+            
+            AccessTokenRequest.Head head = new AccessTokenRequest.Head(appKey);
+            AccessTokenRequest.Body body = new AccessTokenRequest.Body(requestToken.trim(), appEncryptKey, appUserId);
+            AccessTokenRequest accessTokenRequest = new AccessTokenRequest();
+            accessTokenRequest.setHead(head);
+            accessTokenRequest.setBody(body);
 
-            AppConfig config = new AppConfig();
-            config.setAppName(appName);
-            config.setAppVer(appVersion);
-            config.setOsName(osName);
-            config.setEncryptKey(encryptKey);
-            config.setKey(userKey);
-            config.setUserId(userId);
-            config.setPassword(password);
-            config.setLoginId(loginId);
+            // Step 4: Validate All Inputs Are Non-Null
+            log.info("Attempting to generate access token with the following details:");
+            log.info("--> App Key: {}", appKey);
+            log.info("--> Request Token: {}", requestToken.trim());
+            log.info("--> App Encrypt Key: {}", appEncryptKey);
+            log.info("--> App User ID: {}", appUserId);
 
-            Properties properties = new Properties();
-            properties.setClientcode(clientCode);
-            properties.setAppSource(appSource);
-            if (StringUtils.hasText(deviceIp)) {
-                properties.setRemoteIpAddress(deviceIp);
-            }
-            if (StringUtils.hasText(deviceId)) {
-                properties.setMachineID(deviceId);
-            }
 
-            String totpCode = StringUtils.hasText(totp) ? totp : resolveTotpCode();
+            int maxRetries = 3;
+            for (int attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                    // Step 2: Log Your Exact JSON Request in Java
+                    String jsonPayload = OBJECT_MAPPER.writeValueAsString(accessTokenRequest);
+                    log.info("GetAccessToken Request Payload (Attempt {}/{}): {}", attempt + 1, maxRetries, jsonPayload);
 
-            RestClient apis = new RestClient(config, properties);
-            try {
-                String responseJson = apis.getTotpSession(properties.getClientcode(), totpCode, tradingPin);
-                log.info(" Response >> " + responseJson);
+                    AccessTokenResponse response = webClient.post()
+                            .uri("/GetAccessToken")
+                            .bodyValue(accessTokenRequest)
+                            .retrieve()
+                            .bodyToMono(AccessTokenResponse.class)
+                            .block();
 
-                Map<String, Object> response = parseJson(responseJson);
-                Map<String, Object> bodyMap = asMap(response.get("body"));
-                if (bodyMap.isEmpty()) {
-                    log.warn("FivePaisa authentication response did not include a body payload");
-                    return;
+                    if (response != null && response.getBody() != null && response.getBody().getAccessToken() != null && response.getBody().getStatus() == 0) {
+                        String token = response.getBody().getAccessToken();
+                        bearerToken.set(token);
+                        tokenExpiry.set(resolveExpiryInstant(null)); // Set expiry to end of day
+
+                        this.webClient = this.webClient.mutate()
+                                .defaultHeaders(headers -> {
+                                    headers.setBearerAuth(token);
+                                    headers.add("clientCode", clientCode);
+                                })
+                                .build();
+
+                        log.info("Successfully generated and stored 5paisa access token. Valid until {}", tokenExpiry.get());
+                        return; // Exit method on success
+
+                    } else {
+                        String message = response != null && response.getBody() != null ? response.getBody().getMessage() : "No response body";
+                        log.error("Failed to generate access token from 5paisa. Response: {}", message);
+                        throw new RuntimeException("Failed to get access token from 5paisa: " + message);
+                    }
+                } catch (WebClientResponseException ex) {
+                    log.error("WebClient error during token generation: status={}, body={}", ex.getStatusCode(), ex.getResponseBodyAsString());
+                    if (ex.getStatusCode().value() == 503 && attempt < maxRetries - 1) {
+                        log.warn("503 Service Unavailable received. Retrying in {}s...", (long) Math.pow(2, attempt));
+                        try {
+                            Thread.sleep((long) Math.pow(2, attempt) * 1000);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            throw new RuntimeException("Retry wait was interrupted", ie);
+                        }
+                    } else {
+                        throw new RuntimeException("Failed to get access token from 5paisa after retries.", ex);
+                    }
+                } catch (Exception e) {
+                    log.error("Exception while generating access token", e);
+                    throw new RuntimeException("Exception while generating access token", e);
                 }
-
-                long status = parseLong(bodyMap.get("Status"), -1L);
-                if (status != 0L) {
-                    log.warn("FivePaisa authentication failed for client {}: status={} message={}", clientCode, status, extractString(bodyMap.get("Message")));
-                    return;
-                }
-
-                String accessToken = extractString(bodyMap.get("AccessToken"));
-                if (!StringUtils.hasText(accessToken)) {
-                    log.warn("FivePaisa authentication response did not include an access token");
-                    return;
-                }
-
-                bearerToken.set(accessToken);
-                feedToken.set(extractString(bodyMap.get("FeedToken")));
-
-                Instant expiry = resolveExpiryInstant(bodyMap);
-                tokenExpiry.set(expiry);
-
-                this.webClient = this.webClient.mutate()
-                        .defaultHeaders(headers -> {
-                            headers.setBearerAuth(accessToken);
-                            headers.add("clientCode", clientCode);
-                            if (StringUtils.hasText(feedToken.get())) {
-                                headers.add("feedToken", feedToken.get());
-                            }
-                        })
-                        .build();
-
-                log.info("FivePaisa authentication succeeded for client {}. Token valid until {}", clientCode, tokenExpiry.get());
-            } catch (Exception ex) {
-                log.warn("Failed to authenticate with FivePaisa for client {}: {}", clientCode, ex.getMessage());
             }
+            // If the loop completes without success
+            throw new RuntimeException("Failed to generate access token after " + maxRetries + " attempts.");
         }
     }
 
@@ -491,73 +516,6 @@ public class FivePaisaService {
                 .build();
     }
 
-    private String resolveTotpCode() {
-        if (StringUtils.hasText(totpSecret)) {
-            try {
-                return generateTotp(totpSecret, totpDigits, totpStepSeconds);
-            } catch (Exception ex) {
-                log.warn("Failed to generate FivePaisa TOTP using provided secret: {}", ex.getMessage());
-            }
-        }
-        if (StringUtils.hasText(staticTotpCode)) {
-            return staticTotpCode.trim();
-        }
-        return "";
-    }
-
-    private String generateTotp(String secret, int digits, int stepSeconds) throws Exception {
-        byte[] key = decodeBase32(secret);
-        if (key.length == 0) {
-            throw new IllegalArgumentException("Empty Base32 secret");
-        }
-        int effectiveDigits = Math.max(1, Math.min(8, digits));
-        int effectiveStep = Math.max(1, stepSeconds);
-        long timeWindow = Instant.now().getEpochSecond() / effectiveStep;
-        byte[] data = ByteBuffer.allocate(8).putLong(timeWindow).array();
-
-        Mac mac = Mac.getInstance("HmacSHA1");
-        mac.init(new SecretKeySpec(key, "HmacSHA1"));
-        byte[] hash = mac.doFinal(data);
-
-        int offset = hash[hash.length - 1] & 0x0F;
-        if (offset + 4 > hash.length) {
-            throw new IllegalStateException("Unexpected hash length for TOTP generation");
-        }
-
-        int binary = ((hash[offset] & 0x7F) << 24)
-                | ((hash[offset + 1] & 0xFF) << 16)
-                | ((hash[offset + 2] & 0xFF) << 8)
-                | (hash[offset + 3] & 0xFF);
-
-        int modulus = 1;
-        for (int i = 0; i < effectiveDigits; i++) {
-            modulus *= 10;
-        }
-
-        int otp = binary % modulus;
-        return String.format(Locale.US, "%0" + effectiveDigits + "d", otp);
-    }
-
-    private byte[] decodeBase32(String secret) {
-        String normalized = secret == null ? "" : secret.replace(" ", "").replace("=", "").toUpperCase(Locale.US);
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        int buffer = 0;
-        int bitsLeft = 0;
-        for (char ch : normalized.toCharArray()) {
-            int value = BASE32_ALPHABET.indexOf(ch);
-            if (value < 0) {
-                throw new IllegalArgumentException("Invalid Base32 character: " + ch);
-            }
-            buffer = (buffer << 5) | value;
-            bitsLeft += 5;
-            if (bitsLeft >= 8) {
-                output.write((buffer >> (bitsLeft - 8)) & 0xFF);
-                bitsLeft -= 8;
-            }
-        }
-        return output.toByteArray();
-    }
-
     private Map<String, Object> parseJson(String json) {
         if (!StringUtils.hasText(json)) {
             return Collections.emptyMap();
@@ -595,7 +553,8 @@ public class FivePaisaService {
 
     private void ensureAuthenticated() {
         if (!hasValidToken()) {
-            authenticate(null);
+            // We can no longer auto-authenticate. We must throw an exception.
+            throw new IllegalStateException("5Paisa access token is missing or expired. Please log in again via the auth endpoints.");
         }
     }
 

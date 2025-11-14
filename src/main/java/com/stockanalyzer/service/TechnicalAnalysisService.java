@@ -45,16 +45,16 @@ public class TechnicalAnalysisService {
     private final FivePaisaService fivePaisaService;
     private final Core taLib = new Core();
 
+    private static final int INDICATOR_BATCH_SIZE = 50;
+
     @Value("${technical-analysis.indicators.lookback-days:100}")
     private int lookbackDays;
 
     @Scheduled(cron = "0 32 0 * * MON-FRI", zone = "Asia/Kolkata")
-    @Transactional
     public void calculateDailyIndicators() {
         calculateIndicatorsForDate(LocalDate.now());
     }
 
-    @Transactional
     public List<TechnicalIndicator> calculateIndicatorsForDate(LocalDate asOfDate) {
         log.info("Starting technical indicator calculation for date: {}", asOfDate);
 
@@ -72,9 +72,27 @@ public class TechnicalAnalysisService {
         List<String> symbols = priceDataRepository
                 .findSymbolsByAverageValueTraded(startDate, endDate, minAverageValue);
 
-        log.info("Found {} symbols to process for date {}", symbols.size(), asOfDate);
+        log.info("Found {} symbols to process for date {}. Processing in batches of {}.", symbols.size(), asOfDate, INDICATOR_BATCH_SIZE);
 
-        return symbols.stream()
+        List<TechnicalIndicator> allCalculatedIndicators = new ArrayList<>();
+        for (int i = 0; i < symbols.size(); i += INDICATOR_BATCH_SIZE) {
+            List<String> symbolBatch = symbols.subList(i, Math.min(i + INDICATOR_BATCH_SIZE, symbols.size()));
+            try {
+                log.info("Processing batch {}/{}", (i / INDICATOR_BATCH_SIZE) + 1, (int) Math.ceil((double) symbols.size() / INDICATOR_BATCH_SIZE));
+                List<TechnicalIndicator> batchResult = processSymbolsBatch(symbolBatch, asOfDate);
+                allCalculatedIndicators.addAll(batchResult);
+            } catch (Exception e) {
+                log.error("Failed to process batch starting with symbol {}. Error: {}", symbolBatch.get(0), e.getMessage(), e);
+                // Continue to the next batch
+            }
+        }
+
+        return allCalculatedIndicators;
+    }
+
+    @Transactional
+    public List<TechnicalIndicator> processSymbolsBatch(List<String> symbolBatch, LocalDate asOfDate) {
+        return symbolBatch.stream()
                 .map(symbol -> {
                     try {
                         return calculateIndicators(symbol, asOfDate);
@@ -732,6 +750,11 @@ public class TechnicalAnalysisService {
 
                     calculateAndSetDynamicPivotDistances(dto, priceData, latestIndicator);
                     deriveDynamicPricePosition(dto);
+
+                    // Add historical data
+                    dto.setHistoricalIndicators(historicalIndicators.stream()
+                            .map(this::mapToDTO)
+                            .collect(Collectors.toList()));
 
                     return dto;
                 })

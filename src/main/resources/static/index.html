@@ -77,6 +77,19 @@
 <div class="container">
     <h1>Stock Analyzer API Interface</h1>
 
+    <!-- 5Paisa Authentication -->
+    <div class="endpoint">
+        <h3>5Paisa OAuth Login</h3>
+        <p><strong>Step 1:</strong> Click the button to get your unique login URL.</p>
+        <button onclick="fetchApiData('getLoginUrl', 'link')">Get Login URL</button>
+        <pre id="getLoginUrlResult">Login URL will appear here.</pre>
+        <hr>
+        <p><strong>Step 2:</strong> After logging in, copy the <code>RequestToken</code> from the browser's address bar and paste it below.</p>
+        <input type="text" id="requestTokenInput" placeholder="Paste RequestToken here" style="width: 300px;">
+        <button onclick="submitRequestToken()">Submit Token</button>
+        <pre id="submitTokenResult"></pre>
+    </div>
+
     <!-- BTST Recommendations -->
     <div class="endpoint">
         <h3>BTST Recommendations</h3>
@@ -138,6 +151,24 @@
         <pre id="singleIndicatorResult"></pre>
     </div>
 
+    <!-- Export Indicators to File -->
+    <div class="endpoint">
+        <h3>Export All Indicators to File</h3>
+        <p><code>POST /api/v1/analysis/indicators/export</code></p>
+        <input type="text" id="exportIndicatorsDate" placeholder="Date (YYYY-MM-DD)">
+        <button onclick="postApiRequest('exportIndicators')">Export to GDrive Synced Folder</button>
+        <pre id="exportIndicatorsResult"></pre>
+    </div>
+
+    <!-- Export Indicators to CSV File -->
+    <div class="endpoint">
+        <h3>Export All Indicators to CSV File</h3>
+        <p><code>POST /api/v1/analysis/indicators/export-csv</code></p>
+        <input type="text" id="exportIndicatorsCsvDate" placeholder="Date (YYYY-MM-DD)">
+        <button onclick="postApiRequest('exportIndicatorsCsv')">Export CSV to GDrive Synced Folder</button>
+        <pre id="exportIndicatorsCsvResult"></pre>
+    </div>
+
 </div>
 
 <script>
@@ -188,6 +219,9 @@
                 url = `/api/v1/analysis/indicators/${singleSymbol}`;
                 if (singleDate) url += `?date=${singleDate}`;
                 break;
+            case 'getLoginUrl':
+                url = '/api/v1/auth/5paisa/login-url';
+                break;
         }
 
         try {
@@ -207,11 +241,87 @@
                 link.download = 'indicators.csv';
                 link.click();
                 resultEl.textContent = 'Download complete.';
+            } else if (type === 'link') {
+                const url = await response.text();
+                resultEl.innerHTML = `<a href="${url}" target="_blank">${url}</a>`;
             }
 
         } catch (error) {
             resultEl.textContent = `Error: ${error.message}`;
             console.error('Fetch error:', error);
+        }
+    }
+
+    async function postApiRequest(endpointId) {
+        const resultEl = document.getElementById(endpointId + 'Result');
+        resultEl.textContent = 'Processing...';
+
+        let url = '';
+        switch (endpointId) {
+            case 'exportIndicators':
+                const exportDate = document.getElementById('exportIndicatorsDate').value;
+                url = `/api/v1/analysis/indicators/export`;
+                if (exportDate) url += `?date=${exportDate}`;
+                break;
+            case 'exportIndicatorsCsv':
+                const exportCsvDate = document.getElementById('exportIndicatorsCsvDate').value;
+                url = `/api/v1/analysis/indicators/export-csv`;
+                if (exportCsvDate) url += `?date=${exportCsvDate}`;
+                break;
+        }
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP error! Status: ${response.status} - ${errorText}`);
+            }
+
+            const successText = await response.text();
+            resultEl.textContent = successText;
+
+        } catch (error) {
+            resultEl.textContent = `Error: ${error.message}`;
+            console.error('Fetch error:', error);
+        }
+    }
+
+    async function submitRequestToken() {
+        const resultEl = document.getElementById('submitTokenResult');
+        const tokenInput = document.getElementById('requestTokenInput');
+        const token = tokenInput.value.trim();
+
+        if (!token) {
+            resultEl.textContent = 'Error: Request Token cannot be empty.';
+            return;
+        }
+
+        resultEl.textContent = 'Processing...';
+
+        try {
+            const response = await fetch('/api/v1/auth/5paisa/submit-token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'text/plain'
+                },
+                body: token
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP error! Status: ${response.status} - ${errorText}`);
+            }
+
+            const successText = await response.text();
+            resultEl.textContent = successText;
+            tokenInput.value = ''; // Clear input on success
+
+        } catch (error) {
+            resultEl.textContent = `Error: ${error.message}`;
+            console.error('Submit token error:', error);
         }
     }
 </script>

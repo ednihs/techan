@@ -4,7 +4,7 @@ spring:
   application:
     name: stock-analyzer
   datasource:
-    jdbc-url: jdbc:mysql://localhost:3307/stock_analyzer_v1?createDatabaseIfNotExist=true
+    jdbc-url: jdbc:mysql://localhost:3306/stock_analyzer_v1?createDatabaseIfNotExist=true
     driver-class-name: com.mysql.cj.jdbc.Driver
     username: root
     password: interOP@123
@@ -51,6 +51,11 @@ fivepaisa:
     password: ${FIVEPAISA_PASSWORD:vMvI75gWq2F}
     login-id: ${FIVEPAISA_CLIENT_CODE:50003277}
     user-id: ${FIVEPAISA_CLIENT_CODE:xw3Qrntmt5h}
+  app:
+    key: fAGoVxCEjkYVN0UKIQfRdUKruwAIqc6c
+    encrypt_key: EwGIpQIwjAMjzeKR2baglWR5aduY4F3X
+    user_id: xw3Qrntmt5h
+    redirect_url: http://127.0.0.1:8088/
 nse:
   bhavcopy:
     base-url: "https://nsearchives.nseindia.com/content/cm/"
@@ -87,3 +92,12 @@ management:
   endpoint:
     health:
       show-details: always
+
+# Indicator Export Configuration
+indicator:
+  export:
+    path: /home/ec2-user/stock-indicators
+    rclone-sync-command: "/usr/bin/rclone sync /home/ec2-user/stock-indicators gdrive:MyStockIndicators --log-file=/home/ec2-user/rclone.log"
+    csv:
+      path: /home/ec2-user/all-stock-indicators
+      rclone-sync-command: "/usr/bin/rclone sync /home/ec2-user/all-stock-indicators gdrive:MyAllStockIndicators --log-file=/home/ec2-user/rclone.log"
