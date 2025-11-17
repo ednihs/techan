@@ -10,6 +10,7 @@ import com.stockanalyzer.dto.HoldingDTO;
 import com.stockanalyzer.dto.MarketFeedData;
 import com.stockanalyzer.dto.OrderRequestDTO;
 import com.stockanalyzer.dto.OrderResponseDTO;
+import com.stockanalyzer.exception.AuthenticationFailedException;
 import jakarta.annotation.PostConstruct;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -150,7 +151,7 @@ public class FivePaisaService {
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
-        authenticate(null);
+       // authenticate(null);
     }
 
     public void authenticate(String totp) {
@@ -193,20 +194,19 @@ public class FivePaisaService {
                 Map<String, Object> response = parseJson(responseJson);
                 Map<String, Object> bodyMap = asMap(response.get("body"));
                 if (bodyMap.isEmpty()) {
-                    log.warn("FivePaisa authentication response did not include a body payload");
-                    return;
+                    throw new AuthenticationFailedException("FivePaisa authentication response did not include a body payload");
                 }
 
                 long status = parseLong(bodyMap.get("Status"), -1L);
                 if (status != 0L) {
-                    log.warn("FivePaisa authentication failed for client {}: status={} message={}", clientCode, status, extractString(bodyMap.get("Message")));
-                    return;
+                    String errorMessage = String.format("FivePaisa authentication failed for client %s: status=%d message=%s",
+                            clientCode, status, extractString(bodyMap.get("Message")));
+                    throw new AuthenticationFailedException(errorMessage);
                 }
 
                 String accessToken = extractString(bodyMap.get("AccessToken"));
                 if (!StringUtils.hasText(accessToken)) {
-                    log.warn("FivePaisa authentication response did not include an access token");
-                    return;
+                    throw new AuthenticationFailedException("FivePaisa authentication response did not include an access token");
                 }
 
                 bearerToken.set(accessToken);
@@ -227,7 +227,7 @@ public class FivePaisaService {
 
                 log.info("FivePaisa authentication succeeded for client {}. Token valid until {}", clientCode, tokenExpiry.get());
             } catch (Exception ex) {
-                log.warn("Failed to authenticate with FivePaisa for client {}: {}", clientCode, ex.getMessage());
+                throw new AuthenticationFailedException("Failed to authenticate with FivePaisa for client " + clientCode, ex);
             }
         }
     }

@@ -19,9 +19,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -39,6 +40,9 @@ import java.util.function.Function;
 @RequiredArgsConstructor
 @Slf4j
 public class TechnicalAnalysisService {
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     private final PriceDataRepository priceDataRepository;
     private final TechnicalIndicatorRepository technicalIndicatorRepository;
@@ -59,7 +63,6 @@ public class TechnicalAnalysisService {
         log.info("Starting technical indicator calculation for date: {}", asOfDate);
 
         // Check if asOfDate is today and time is before 15:30 IST
-        ZoneId istZone = ZoneId.of("Asia/Kolkata");
         /*if (asOfDate.equals(nowIst.toLocalDate()) && nowIst.toLocalTime().isBefore(LocalTime.of(16, 45))) {
             log.info("Market is open. Fetching live data...");
             fetchAndSaveLivePriceData(asOfDate);
@@ -74,17 +77,41 @@ public class TechnicalAnalysisService {
 
         log.info("Found {} symbols to process for date {}", symbols.size(), asOfDate);
 
-        return symbols.stream()
-                .map(symbol -> {
-                    try {
-                        return calculateIndicators(symbol, asOfDate);
-                    } catch (Exception e) {
-                        log.error("Failed to calculate indicators for symbol {} on date {}", symbol, asOfDate, e);
-                        return null;
-                    }
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+        List<TechnicalIndicator> indicatorsToSave = new ArrayList<>();
+        List<TechnicalIndicator> allSavedIndicators = new ArrayList<>();
+        final int BATCH_SIZE = 100;
+
+        for (String symbol : symbols) {
+            try {
+                TechnicalIndicator indicator = calculateIndicators(symbol, asOfDate);
+                if (indicator != null) {
+                    indicatorsToSave.add(indicator);
+                }
+
+                if (indicatorsToSave.size() >= BATCH_SIZE) {
+                    long startTime = System.currentTimeMillis();
+                    List<TechnicalIndicator> savedBatch = technicalIndicatorRepository.saveAll(indicatorsToSave);
+                    technicalIndicatorRepository.flush(); // Explicitly flush changes to the DB
+                    allSavedIndicators.addAll(savedBatch);
+                    indicatorsToSave.clear();
+                    entityManager.clear(); // Detach all entities to free up memory
+                    calculated += savedBatch.size();
+                    System.out.println("Number of indicators updated so far: " + calculated + ", time taken for batch: " + (System.currentTimeMillis() - startTime) + "ms");
+                }
+            } catch (Exception e) {
+                log.error("Failed to calculate indicators for symbol {} on date {}", symbol, asOfDate, e);
+            }
+        }
+
+        if (!indicatorsToSave.isEmpty()) {
+            long startTime = System.currentTimeMillis();
+            List<TechnicalIndicator> savedBatch = technicalIndicatorRepository.saveAll(indicatorsToSave);
+            allSavedIndicators.addAll(savedBatch);
+            calculated += savedBatch.size();
+            System.out.println("Number of indicators updated so far: " + calculated + ", time taken for final batch: " + (System.currentTimeMillis() - startTime) + "ms");
+        }
+
+        return allSavedIndicators;
     }
 
     private void fetchAndSaveLivePriceData(LocalDate asOfDate) {
@@ -142,19 +169,12 @@ public class TechnicalAnalysisService {
     }
 
     public static int calculated = 0;
-    @Transactional
+    // Transaction is now managed by the calling batch method `calculateIndicatorsForDate`
     public TechnicalIndicator calculateIndicators(String symbol, LocalDate asOfDate) {
-        long startTime = System.currentTimeMillis();
         List<PriceData> history = priceDataRepository
                 .findHistoricalData(symbol, asOfDate.minusDays(lookbackDays), asOfDate);
 
-        TechnicalIndicator indicator = calculateIndicatorsFromHistory(history, asOfDate);
-
-        if (indicator != null) {
-            System.out.println("number of indicators updated so far "+(calculated++) +" and time taken"+ (System.currentTimeMillis() - startTime) );
-            return technicalIndicatorRepository.save(indicator);
-        }
-        return null;
+        return calculateIndicatorsFromHistory(history, asOfDate);
     }
 
     public TechnicalIndicator calculateIndicatorsFromHistory(List<PriceData> history, LocalDate asOfDate) {

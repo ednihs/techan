@@ -138,6 +138,15 @@
         <pre id="singleIndicatorResult"></pre>
     </div>
 
+    <!-- Reauthenticate -->
+    <div class="endpoint">
+        <h3>Reauthenticate</h3>
+        <p><code>GET /reauthenticate</code></p>
+        <input type="text" id="reauthenticateTotp" placeholder="TOTP">
+        <button onclick="fetchApiData('reauthenticate', 'text')">Reauthenticate</button>
+        <pre id="reauthenticateResult"></pre>
+    </div>
+
 </div>
 
 <script>
@@ -188,6 +197,14 @@
                 url = `/api/v1/analysis/indicators/${singleSymbol}`;
                 if (singleDate) url += `?date=${singleDate}`;
                 break;
+            case 'reauthenticate':
+                const totp = document.getElementById('reauthenticateTotp').value;
+                if (!totp) {
+                    resultEl.textContent = 'Error: TOTP is required.';
+                    return;
+                }
+                url = `/reauthenticate?totp=${totp}`;
+                break;
         }
 
         try {
@@ -207,6 +224,8 @@
                 link.download = 'indicators.csv';
                 link.click();
                 resultEl.textContent = 'Download complete.';
+            } else if (type === 'text') {
+                resultEl.textContent = await response.text();
             }
 
         } catch (error) {
