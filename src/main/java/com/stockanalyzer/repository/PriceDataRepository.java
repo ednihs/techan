@@ -56,4 +56,21 @@ public interface PriceDataRepository extends JpaRepository<PriceData, Long> {
             @Param("endDate") LocalDate endDate,
             @Param("minValue") double minValue
     );
+
+    List<PriceData> findBySymbolAndTradeDateBetween(String symbol, LocalDate startDate, LocalDate endDate);
+    List<PriceData> findTop5BySymbolOrderByTradeDateDesc(String symbol);
+
+    @Query("SELECT p.closePrice FROM PriceData p WHERE p.symbol = :symbol ORDER BY p.tradeDate DESC")
+    List<Double> findRecentClosePrices(@Param("symbol") String symbol, Pageable pageable);
+
+    @Query("SELECT p FROM PriceData p WHERE p.symbol = :symbol AND p.volume > :minValue")
+    List<PriceData> findBySymbolWithVolumeGreaterThan(
+            @Param("symbol") String symbol,
+            @Param("minValue") double minValue
+    );
+
+    @Query("SELECT DISTINCT p.symbol FROM PriceData p WHERE p.tradeDate = :date")
+    List<String> findDistinctSymbolsByTradeDate(@Param("date") LocalDate date);
+
+    List<PriceData> findBySymbolAndTradeDateBeforeOrderByTradeDateDesc(String symbol, LocalDate date, Pageable pageable);
 }

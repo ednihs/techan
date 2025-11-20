@@ -4,7 +4,8 @@ import com.stockanalyzer.dto.MarketFeedData;
 import com.stockanalyzer.entity.IntradayData;
 import com.stockanalyzer.repository.IntradayDataRepository;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,9 +19,9 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class IntradayDataService {
 
+    private static final Logger log = LoggerFactory.getLogger(IntradayDataService.class);
     private final IntradayDataRepository intradayDataRepository;
     private final FivePaisaService fivePaisaService;
 

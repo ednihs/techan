@@ -52,7 +52,7 @@ public class TechnicalAnalysisService {
     @Value("${technical-analysis.indicators.lookback-days:100}")
     private int lookbackDays;
 
-    @Scheduled(cron = "0 32 0 * * MON-FRI", zone = "Asia/Kolkata")
+    //@Scheduled(cron = "0 32 0 * * MON-FRI", zone = "Asia/Kolkata")
     @Transactional
     public void calculateDailyIndicators() {
         calculateIndicatorsForDate(LocalDate.now());

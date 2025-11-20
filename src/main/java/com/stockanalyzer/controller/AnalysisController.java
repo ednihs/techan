@@ -18,6 +18,7 @@ import com.stockanalyzer.service.RiskAssessmentService;
 import com.stockanalyzer.service.RiskAssessmentService.GapRisk;
 import com.stockanalyzer.service.RiskAssessmentService.LiquidityRisk;
 import com.stockanalyzer.service.TechnicalAnalysisService;
+import com.stockanalyzer.service.TradePredictionService;
 import com.stockanalyzer.util.DateUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +36,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 
 import java.io.IOException;
 import java.time.LocalDate;
@@ -55,6 +58,9 @@ public class AnalysisController {
     private final RealtimeAnalysisRepository realtimeAnalysisRepository;
     private final TechnicalAnalysisService technicalAnalysisService;
     private final CommodityAnalysisService commodityAnalysisService;
+
+    @Autowired
+    private TradePredictionService tradePredictionService;
 
     @GetMapping("/btst/recommendations")
     public ResponseEntity<List<BTSTRecommendationDTO>> getRecommendations(
@@ -154,16 +160,117 @@ public class AnalysisController {
     }
 
     @GetMapping("/indicators/{symbol}")
-    public ResponseEntity<EnrichedTechnicalIndicatorDTO> getEnrichedTechnicalIndicator(
+    public ResponseEntity<List<TechnicalIndicatorDTO>> getTechnicalIndicatorHistory(
             @PathVariable String symbol,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         log.info("GET /indicators/{} called with date: {}", symbol, date);
-        LocalDate resolvedDate = (date == null) ? LocalDate.now() : date;
-        EnrichedTechnicalIndicatorDTO enrichedIndicator = technicalAnalysisService.getEnrichedTechnicalIndicator(symbol, resolvedDate);
-        if (enrichedIndicator == null) {
+        
+        // If date is not provided, get the last available date for this symbol
+        LocalDate resolvedDate;
+        if (date == null) {
+            Optional<LocalDate> lastDateOpt = technicalIndicatorRepository.findLatestCalculationDateBySymbol(symbol);
+            if (lastDateOpt.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            resolvedDate = lastDateOpt.get();
+        } else {
+            resolvedDate = date;
+        }
+        
+        // Fetch the last 10 records up to the resolved date
+        List<TechnicalIndicator> indicators = technicalIndicatorRepository
+                .findTop10BySymbolAndCalculationDateLessThanEqualOrderByCalculationDateDesc(symbol, resolvedDate);
+        
+        if (indicators.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.ok(enrichedIndicator);
+        
+        List<TechnicalIndicatorDTO> result = indicators.stream()
+                .map(this::toTechnicalDto)
+                .collect(Collectors.toList());
+        
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/indicators/bulk/download")
+    public void downloadBulkIndicators(
+            HttpServletResponse response,
+            @RequestParam String symbols,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) throws IOException {
+        log.info("GET /indicators/bulk/download called with symbols: {}, date: {}", symbols, date);
+        
+        // Parse comma-separated symbols
+        List<String> symbolList = List.of(symbols.split(","))
+                .stream()
+                .map(String::trim)
+                .map(String::toUpperCase)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toList());
+        
+        if (symbolList.isEmpty()) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "No valid symbols provided");
+            return;
+        }
+        
+        // Set response headers for zip file download
+        response.setContentType("application/zip");
+        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"indicators_bulk.zip\"");
+        
+        try (java.util.zip.ZipOutputStream zipOut = new java.util.zip.ZipOutputStream(response.getOutputStream())) {
+            for (String symbol : symbolList) {
+                try {
+                    // Get the last available date for this symbol if not provided
+                    LocalDate resolvedDate;
+                    if (date == null) {
+                        Optional<LocalDate> lastDateOpt = technicalIndicatorRepository.findLatestCalculationDateBySymbol(symbol);
+                        if (lastDateOpt.isEmpty()) {
+                            log.warn("No data found for symbol: {}", symbol);
+                            continue;
+                        }
+                        resolvedDate = lastDateOpt.get();
+                    } else {
+                        resolvedDate = date;
+                    }
+                    
+                    // Fetch the last 10 records for this symbol
+                    List<TechnicalIndicator> indicators = technicalIndicatorRepository
+                            .findTop10BySymbolAndCalculationDateLessThanEqualOrderByCalculationDateDesc(symbol, resolvedDate);
+                    
+                    if (indicators.isEmpty()) {
+                        log.warn("No indicators found for symbol: {} on date: {}", symbol, resolvedDate);
+                        continue;
+                    }
+                    
+                    // Convert to DTOs
+                    List<TechnicalIndicatorDTO> dtoList = indicators.stream()
+                            .map(this::toTechnicalDto)
+                            .collect(Collectors.toList());
+                    
+                    // Create a JSON file for this symbol
+                    String fileName = symbol + "_indicators.json";
+                    java.util.zip.ZipEntry zipEntry = new java.util.zip.ZipEntry(fileName);
+                    zipOut.putNextEntry(zipEntry);
+                    
+                    // Write JSON content
+                    com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    objectMapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+                    objectMapper.setSerializationInclusion(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL);
+                    objectMapper.enable(com.fasterxml.jackson.databind.SerializationFeature.INDENT_OUTPUT);
+                    
+                    String jsonContent = objectMapper.writeValueAsString(dtoList);
+                    zipOut.write(jsonContent.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    zipOut.closeEntry();
+                    
+                    log.info("Added {} records for symbol {} to zip", indicators.size(), symbol);
+                } catch (Exception e) {
+                    log.error("Error processing symbol: {}", symbol, e);
+                    // Continue processing other symbols
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error creating zip file", e);
+            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error creating zip file: " + e.getMessage());
+        }
     }
 
     @GetMapping("/commodities/crudeoil/indicators")
@@ -223,8 +330,84 @@ public class AnalysisController {
     @GetMapping("/fetch-live-data")
     public ResponseEntity<String> fetchLiveData() {
         log.info("GET /fetch-live-data called");
-        technicalAnalysisService.scheduledFetchAndSaveLivePriceData();
-        return ResponseEntity.ok("Live data fetch triggered successfully.");
+        try {
+            technicalAnalysisService.scheduledFetchAndSaveLivePriceData();
+            return ResponseEntity.ok("Live data fetch triggered successfully.");
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to fetch live data: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/predict/trades/{symbol}")
+    public ResponseEntity<String> predictTradesForSymbol(
+            @PathVariable String symbol,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        try {
+            int windowSize = 20; // Must match the windowSize used for training
+            tradePredictionService.predictAndUpdateTrades(symbol, date, windowSize);
+            return ResponseEntity.ok("Successfully predicted and updated trades for " + symbol + " on " + date);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to predict trades for " + symbol + ": " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/predict/trades/all")
+    public ResponseEntity<String> predictTradesForAll(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        try {
+            int windowSize = 20; // Must match the windowSize used for training
+            tradePredictionService.predictAndUpdateTradesForAllSymbols(date, windowSize);
+            return ResponseEntity.ok("Successfully queued prediction for all symbols on " + date);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to predict trades for all symbols: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/train/trades-model/{symbol}")
+    public ResponseEntity<String> trainTradesModel(@PathVariable String symbol) {
+        try {
+            int windowSize = 30;    // Configurable
+            double lambda = 0.01;   // Configurable
+            tradePredictionService.trainAndSaveModel(symbol, windowSize, lambda);
+            return ResponseEntity.ok("Successfully queued training for " + symbol);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to train model for " + symbol + ": " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/train/trades-model/all")
+    public ResponseEntity<String> trainAllTradesModels() {
+        try {
+            int windowSize = 20;    // Configurable
+            double lambda = 0.01;   // Configurable
+            tradePredictionService.trainModelsForAllSymbols(windowSize, lambda);
+            return ResponseEntity.ok("Successfully queued training for all symbols.");
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to train models for all symbols: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/train/trades-model/cleanup-and-retrain")
+    public ResponseEntity<String> cleanupOldModelsAndRetrain() {
+        try {
+            int windowSize = 20;    // Configurable
+            double lambda = 0.01;   // Configurable
+            
+            // Delete old models without scaler files
+            int deletedCount = tradePredictionService.deleteOldModelsWithoutScalers(windowSize);
+            
+            // Retrain all models
+            tradePredictionService.trainModelsForAllSymbols(windowSize, lambda);
+            
+            return ResponseEntity.ok("Deleted " + deletedCount + " old models and started retraining all symbols.");
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to cleanup and retrain models: " + e.getMessage());
+        }
     }
 
     private BTSTRecommendationDTO toRecommendation(BTSTAnalysis analysis) {

@@ -4,7 +4,6 @@ import com.stockanalyzer.entity.TechnicalIndicator;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import com.stockanalyzer.dto.EnrichedTechnicalIndicatorDTO;
 
 
 import java.time.LocalDate;
@@ -26,4 +25,9 @@ public interface TechnicalIndicatorRepository extends JpaRepository<TechnicalInd
     List<TechnicalIndicator> findBySymbolAndCalculationDateBetweenOrderByCalculationDateDesc(String symbol, LocalDate startDate, LocalDate endDate);
 
     List<TechnicalIndicator> findTop5BySymbolAndCalculationDateLessThanEqualOrderByCalculationDateDesc(String symbol, LocalDate date);
+    
+    List<TechnicalIndicator> findTop10BySymbolAndCalculationDateLessThanEqualOrderByCalculationDateDesc(String symbol, LocalDate date);
+    
+    @Query("SELECT MAX(ti.calculationDate) FROM TechnicalIndicator ti WHERE ti.symbol = :symbol")
+    Optional<LocalDate> findLatestCalculationDateBySymbol(@Param("symbol") String symbol);
 }

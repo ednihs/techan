@@ -25,3 +25,5 @@ ALTER TABLE technical_indicators
     ADD COLUMN data_completeness VARCHAR(20);
 
 
+
+

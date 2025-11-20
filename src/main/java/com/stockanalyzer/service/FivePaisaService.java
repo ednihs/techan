@@ -16,7 +16,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import okhttp3.Response;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
@@ -53,9 +54,9 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class FivePaisaService {
 
+    private static final Logger log = LoggerFactory.getLogger(FivePaisaService.class);
     private final ScripMasterService scripMasterService;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};

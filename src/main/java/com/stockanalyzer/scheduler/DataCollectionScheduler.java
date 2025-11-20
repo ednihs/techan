@@ -43,7 +43,7 @@ public class DataCollectionScheduler {
         }
     }
 
-    @Scheduled(cron = "0 10 12 * * MON-FRI", zone = "Asia/Kolkata")
+    @Scheduled(cron = "0 20 12 * * MON-FRI", zone = "Asia/Kolkata")
     public void collectEndOfDayData() {
         LocalDate tradeDate = LocalDate.now();
         if (tradeDate.getDayOfWeek() == DayOfWeek.SATURDAY || tradeDate.getDayOfWeek() == DayOfWeek.SUNDAY) {

@@ -138,6 +138,25 @@
         <pre id="singleIndicatorResult"></pre>
     </div>
 
+    <!-- Bulk Indicators Download -->
+    <div class="endpoint">
+        <h3>Bulk Indicators Download (ZIP)</h3>
+        <p><code>GET /api/v1/analysis/indicators/bulk/download</code></p>
+        <input type="text" id="bulkSymbols" placeholder="Symbols (comma-separated, e.g., TCS,INFY,RELIANCE)" style="width: 400px;">
+        <input type="date" id="bulkDate" placeholder="Date (optional)">
+        <button onclick="fetchApiData('bulkDownload', 'zip')">Download ZIP</button>
+        <pre id="bulkDownloadResult">Click the button to download a ZIP file with indicators for multiple stocks.</pre>
+    </div>
+
+    <!-- Run Technical Indicators Calculation -->
+    <div class="endpoint">
+        <h3>Run On-Demand Technical Indicators Calculation</h3>
+        <p><code>GET /api/v1/analysis/technical/run</code></p>
+        <input type="date" id="technicalRunDate" placeholder="Date (optional)">
+        <button onclick="fetchApiData('technicalRun')">Run Calculation</button>
+        <pre id="technicalRunResult"></pre>
+    </div>
+
     <!-- Reauthenticate -->
     <div class="endpoint">
         <h3>Reauthenticate</h3>
@@ -197,6 +216,21 @@
                 url = `/api/v1/analysis/indicators/${singleSymbol}`;
                 if (singleDate) url += `?date=${singleDate}`;
                 break;
+            case 'bulkDownload':
+                const bulkSymbols = document.getElementById('bulkSymbols').value;
+                const bulkDate = document.getElementById('bulkDate').value;
+                if (!bulkSymbols) {
+                    resultEl.textContent = 'Error: Symbols are required.';
+                    return;
+                }
+                url = `/api/v1/analysis/indicators/bulk/download?symbols=${encodeURIComponent(bulkSymbols)}`;
+                if (bulkDate) url += `&date=${bulkDate}`;
+                break;
+            case 'technicalRun':
+                const technicalRunDate = document.getElementById('technicalRunDate').value;
+                url = `/api/v1/analysis/technical/run`;
+                if (technicalRunDate) url += `?date=${technicalRunDate}`;
+                break;
             case 'reauthenticate':
                 const totp = document.getElementById('reauthenticateTotp').value;
                 if (!totp) {
@@ -222,6 +256,13 @@
                 const link = document.createElement('a');
                 link.href = window.URL.createObjectURL(blob);
                 link.download = 'indicators.csv';
+                link.click();
+                resultEl.textContent = 'Download complete.';
+            } else if (type === 'zip') {
+                const blob = await response.blob();
+                const link = document.createElement('a');
+                link.href = window.URL.createObjectURL(blob);
+                link.download = 'indicators_bulk.zip';
                 link.click();
                 resultEl.textContent = 'Download complete.';
             } else if (type === 'text') {
