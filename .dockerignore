@@ -1,0 +1,31 @@
+# Exclude heavy data and model files from Docker builds
+data/
+models/
+*.ser
+*.zip
+
+# Exclude build artifacts
+target/
+.mvn/
+
+# Exclude IDE files
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Exclude git
+.git/
+.gitignore
+
+# Exclude documentation
+*.md
+*.pdf
+
+# Exclude test files
+src/test/
+
+# Exclude logs
+logs/
+*.log
+

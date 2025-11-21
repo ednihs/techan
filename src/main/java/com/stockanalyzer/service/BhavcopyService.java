@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.StringReader;
@@ -30,12 +31,14 @@ public class BhavcopyService {
     @Value("${nse.bhavcopy.file-pattern:BhavCopy_NSE_CM_0_0_0_{date}_F_0000.csv.zip}")
     private String filePattern;
 
+    @Transactional
     public void downloadAndProcess(LocalDate date) {
         String formattedDate = date.toString().replaceAll("-", "");
         String fileName = filePattern.replace("{date}", formattedDate);
         String url = baseUrl + fileName;
         log.info("Downloading bhavcopy from {}", url);
         try {
+            // Download and parse the bhavcopy data
             byte[] zipBytes = webClientBuilder.build()
                     .get()
                     .uri(url)
@@ -45,10 +48,21 @@ public class BhavcopyService {
                     .orElseThrow(() -> new IllegalStateException("No response received"));
             String csvContent = extractZipContent(zipBytes);
             List<PriceData> priceDataList = parseBhavcopyCSV(csvContent, date);
+            
+            // Delete existing records for this date before inserting new ones
+            if (priceDataRepository.existsByTradeDate(date)) {
+                log.info("Deleting existing {} records for date {}", 
+                         priceDataRepository.findByTradeDate(date).size(), date);
+                priceDataRepository.deleteByTradeDate(date);
+                log.info("Successfully deleted existing records for {}", date);
+            }
+            
+            // Insert new records
             priceDataRepository.saveAll(priceDataList);
             log.info("Persisted {} bhavcopy records for {}", priceDataList.size(), date);
         } catch (Exception ex) {
             log.error("Failed to process bhavcopy for {}: {}", date, ex.getMessage());
+            throw new RuntimeException("Failed to process bhavcopy for " + date, ex);
         }
     }
 

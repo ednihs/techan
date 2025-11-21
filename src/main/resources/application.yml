@@ -4,7 +4,7 @@ spring:
   application:
     name: stock-analyzer
   datasource:
-    jdbc-url: jdbc:mysql://localhost:3307/stock_analyzer_v1?createDatabaseIfNotExist=true
+    jdbc-url: jdbc:mysql://localhost:3306/stock_analyzer_v1?createDatabaseIfNotExist=true
     driver-class-name: com.mysql.cj.jdbc.Driver
     username: root
     password: interOP@123
@@ -74,6 +74,22 @@ btst:
     max-gap-down: -1.5
     min-gap-up: -0.5
     confidence-threshold: 50.0
+crude:
+  indicators:
+    min-candles: 200
+    batch-size: 100
+  vwap:
+    reset-daily: true
+  obv:
+    ema-period: 10
+  volume:
+    sma-period: 20
+  export:
+    csv-delimiter: ","
+    date-format: "yyyy-MM-dd'T'HH:mm:ss'Z'"
+    max-rows: 10000
+  api:
+    rate-limit: 100
 logging:
   level:
     com.stockanalyzer: INFO

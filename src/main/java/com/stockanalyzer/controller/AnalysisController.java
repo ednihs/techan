@@ -12,6 +12,7 @@ import com.stockanalyzer.entity.TechnicalIndicator;
 import com.stockanalyzer.repository.BTSTAnalysisRepository;
 import com.stockanalyzer.repository.TechnicalIndicatorRepository;
 import com.stockanalyzer.service.BTSTAnalysisService;
+import com.stockanalyzer.service.BhavcopyService;
 import com.stockanalyzer.repository.RealtimeAnalysisRepository;
 import com.stockanalyzer.service.RealtimeWeakHandsService;
 import com.stockanalyzer.service.RiskAssessmentService;
@@ -58,6 +59,7 @@ public class AnalysisController {
     private final RealtimeAnalysisRepository realtimeAnalysisRepository;
     private final TechnicalAnalysisService technicalAnalysisService;
     private final CommodityAnalysisService commodityAnalysisService;
+    private final BhavcopyService bhavcopyService;
 
     @Autowired
     private TradePredictionService tradePredictionService;
@@ -335,6 +337,32 @@ public class AnalysisController {
             return ResponseEntity.ok("Live data fetch triggered successfully.");
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to fetch live data: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Download and process NSE Bhavcopy data for a specific date.
+     * This endpoint will:
+     * 1. Download the bhavcopy ZIP file from NSE archives
+     * 2. Delete all existing price data for the specified date
+     * 3. Insert fresh data from the downloaded bhavcopy
+     * 
+     * @param date The trade date (defaults to today if not specified)
+     * @return Success message with count of records processed
+     */
+    @GetMapping("/download-bhavcopy")
+    public ResponseEntity<String> downloadBhavcopy(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        log.info("GET /download-bhavcopy called with date: {}", date);
+        try {
+            LocalDate resolvedDate = date != null ? date : LocalDate.now();
+            bhavcopyService.downloadAndProcess(resolvedDate);
+            return ResponseEntity.ok("Bhavcopy data downloaded and processed successfully for " + resolvedDate + 
+                    ". All existing records for this date were replaced with fresh data.");
+        } catch (Exception e) {
+            log.error("Failed to download bhavcopy", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to download bhavcopy: " + e.getMessage());
         }
     }
 

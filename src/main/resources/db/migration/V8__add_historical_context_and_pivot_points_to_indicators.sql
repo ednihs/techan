@@ -27,3 +27,4 @@ ALTER TABLE technical_indicators
 
 
 
+

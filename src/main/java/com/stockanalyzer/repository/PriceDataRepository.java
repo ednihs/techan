@@ -30,6 +30,9 @@ public interface PriceDataRepository extends JpaRepository<PriceData, Long> {
 
     boolean existsByTradeDate(LocalDate tradeDate);
 
+    // Delete all price data for a specific trade date
+    void deleteByTradeDate(LocalDate tradeDate);
+
     @Query("SELECT p FROM PriceData p WHERE p.symbol = :symbol AND p.tradeDate >= :startDate AND p.tradeDate <= :endDate ORDER BY p.tradeDate ASC")
     List<PriceData> findHistoricalData(@Param("symbol") String symbol,
                                          @Param("startDate") LocalDate startDate,

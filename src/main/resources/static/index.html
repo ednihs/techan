@@ -3,279 +3,254 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stock Analyzer API</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            margin: 0;
-            padding: 2rem;
-            background-color: #f4f7f9;
-            color: #333;
-        }
-        h1, h2 {
-            color: #2c3e50;
-            border-bottom: 2px solid #e0e0e0;
-            padding-bottom: 10px;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: #fff;
-            padding: 2rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-        }
-        .endpoint {
-            background-color: #f8f9fa;
-            border: 1px solid #e9ecef;
-            border-radius: 6px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-        .endpoint h3 {
-            margin-top: 0;
-            color: #34495e;
-            font-size: 1.2rem;
-        }
-        code {
-            background: #e9ecef;
-            padding: 3px 6px;
-            border-radius: 4px;
-            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
-        }
-        input, select, button {
-            padding: 10px 12px;
-            margin-right: 10px;
-            border-radius: 4px;
-            border: 1px solid #ccc;
-            font-size: 1rem;
-        }
-        button {
-            background-color: #3498db;
-            color: white;
-            border: none;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        button:hover {
-            background-color: #2980b9;
-        }
-        pre {
-            background: #2c3e50;
-            color: #f8f9fa;
-            padding: 1rem;
-            border-radius: 4px;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-    </style>
+    <title>Stock Analyzer Platform</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container nav-container">
+            <div class="logo">
+                <i class="fas fa-chart-line"></i>
+                <span>Stock Analyzer</span>
+            </div>
+            <ul class="nav-menu" id="navMenu">
+                <li><a href="index.html" class="active">Home</a></li>
+                <li><a href="crude-oil.html">Crude Oil Analysis</a></li>
+                <li><a href="stock-analysis.html">Stock Analysis</a></li>
+                <li><a href="portfolio.html">Portfolio</a></li>
+                <li><a href="#" id="themeToggle"><i class="fas fa-moon"></i></a></li>
+            </ul>
+            <div class="hamburger" id="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    </nav>
 
-<div class="container">
-    <h1>Stock Analyzer API Interface</h1>
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <h1 class="hero-title">
+                    <span class="gradient-text">Advanced Technical Analysis</span>
+                    <br>for Smart Trading
+                </h1>
+                <p class="hero-subtitle">
+                    Real-time market analysis with volume indicators, price patterns, and AI-powered insights
+                </p>
+                <div class="hero-buttons">
+                    <a href="crude-oil.html" class="btn btn-primary">
+                        <i class="fas fa-oil-can"></i> Crude Oil Analysis
+                    </a>
+                    <a href="stock-analysis.html" class="btn btn-secondary">
+                        <i class="fas fa-chart-bar"></i> Stock Analysis
+                    </a>
+                </div>
+            </div>
+            <div class="hero-stats">
+                <div class="stat-card">
+                    <i class="fas fa-database"></i>
+                    <h3 id="totalRecords">-</h3>
+                    <p>Total Records</p>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-chart-line"></i>
+                    <h3 id="activeIndicators">-</h3>
+                    <p>Active Indicators</p>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-clock"></i>
+                    <h3 id="lastUpdate">-</h3>
+                    <p>Last Update</p>
+                </div>
+            </div>
+        </div>
+    </section>
 
-    <!-- BTST Recommendations -->
-    <div class="endpoint">
-        <h3>BTST Recommendations</h3>
-        <p><code>GET /api/v1/analysis/btst/recommendations</code></p>
-        <input type="text" id="btstRecDate" placeholder="Date (YYYY-MM-DD)">
-        <select id="btstRecType">
-            <option value="BUY">BUY</option>
-            <option value="HOLD">HOLD</option>
-            <option value="AVOID">AVOID</option>
-        </select>
-        <button onclick="fetchApiData('btstRec')">Fetch</button>
-        <pre id="btstRecResult"></pre>
-    </div>
-    
-    <!-- Run On-Demand Analysis -->
-    <div class="endpoint">
-        <h3>Run On-Demand BTST Analysis</h3>
-        <p><code>GET /api/v1/analysis/btst/run</code></p>
-        <input type="text" id="btstRunDate" placeholder="Date (YYYY-MM-DD)">
-        <button onclick="fetchApiData('btstRun')">Run</button>
-        <pre id="btstRunResult"></pre>
-    </div>
+    <!-- Features Section -->
+    <section class="features">
+        <div class="container">
+            <h2 class="section-title">Platform Features</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-oil-can"></i>
+                    </div>
+                    <h3>Crude Oil Analysis</h3>
+                    <p>Multi-timeframe analysis (4H, 1H, 15M) with advanced volume indicators including OBV, VWAP, and PVT</p>
+                    <a href="crude-oil.html" class="feature-link">Explore <i class="fas fa-arrow-right"></i></a>
+                </div>
 
-    <!-- Detailed BTST Analysis -->
-    <div class="endpoint">
-        <h3>Detailed BTST Analysis</h3>
-        <p><code>GET /api/v1/analysis/btst/detailed/{symbol}</code></p>
-        <input type="text" id="btstDetailedSymbol" placeholder="Symbol (e.g., TCS)">
-        <input type="text" id="btstDetailedDate" placeholder="Date (YYYY-MM-DD)">
-        <button onclick="fetchApiData('btstDetailed')">Fetch</button>
-        <pre id="btstDetailedResult"></pre>
-    </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-chart-bar"></i>
+                    </div>
+                    <h3>Stock Technical Analysis</h3>
+                    <p>Comprehensive technical indicators including RSI, MACD, Bollinger Bands, and custom momentum metrics</p>
+                    <a href="stock-analysis.html" class="feature-link">Explore <i class="fas fa-arrow-right"></i></a>
+                </div>
 
-    <!-- All Indicators (JSON) -->
-    <div class="endpoint">
-        <h3>All Indicators (JSON)</h3>
-        <p><code>GET /api/v1/analysis/indicators/all/json</code></p>
-        <input type="text" id="allIndicatorsJsonDate" placeholder="Date (YYYY-MM-DD)">
-        <button onclick="fetchApiData('allIndicatorsJson')">Fetch JSON</button>
-        <pre id="allIndicatorsJsonResult"></pre>
-    </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-moon"></i>
+                    </div>
+                    <h3>BTST Recommendations</h3>
+                    <p>AI-powered Buy Today Sell Tomorrow recommendations based on historical patterns and market momentum</p>
+                    <a href="stock-analysis.html#btst" class="feature-link">Explore <i class="fas fa-arrow-right"></i></a>
+                </div>
 
-    <!-- All Indicators (CSV) -->
-    <div class="endpoint">
-        <h3>All Indicators (CSV)</h3>
-        <p><code>GET /api/v1/analysis/indicators/all</code></p>
-        <input type="text" id="allIndicatorsCsvDate" placeholder="Date (YYYY-MM-DD)">
-        <button onclick="fetchApiData('allIndicatorsCsv', 'csv')">Download CSV</button>
-        <pre id="allIndicatorsCsvResult">Click the button to download the CSV file.</pre>
-    </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-download"></i>
+                    </div>
+                    <h3>Data Export</h3>
+                    <p>Export analysis results in CSV, JSON formats with customizable date ranges and filters</p>
+                    <a href="#" class="feature-link">Learn More <i class="fas fa-arrow-right"></i></a>
+                </div>
 
-    <!-- Single Stock Indicator -->
-    <div class="endpoint">
-        <h3>Enriched Indicator for Symbol</h3>
-        <p><code>GET /api/v1/analysis/indicators/{symbol}</code></p>
-        <input type="text" id="singleIndicatorSymbol" placeholder="Symbol (e.g., TCS)">
-        <input type="text" id="singleIndicatorDate" placeholder="Date (YYYY-MM-DD)">
-        <button onclick="fetchApiData('singleIndicator')">Fetch</button>
-        <pre id="singleIndicatorResult"></pre>
-    </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <h3>Real-time Updates</h3>
+                    <p>Live market data integration with data quality tracking and automatic indicator recalculation</p>
+                    <a href="#" class="feature-link">Learn More <i class="fas fa-arrow-right"></i></a>
+                </div>
 
-    <!-- Bulk Indicators Download -->
-    <div class="endpoint">
-        <h3>Bulk Indicators Download (ZIP)</h3>
-        <p><code>GET /api/v1/analysis/indicators/bulk/download</code></p>
-        <input type="text" id="bulkSymbols" placeholder="Symbols (comma-separated, e.g., TCS,INFY,RELIANCE)" style="width: 400px;">
-        <input type="date" id="bulkDate" placeholder="Date (optional)">
-        <button onclick="fetchApiData('bulkDownload', 'zip')">Download ZIP</button>
-        <pre id="bulkDownloadResult">Click the button to download a ZIP file with indicators for multiple stocks.</pre>
-    </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-briefcase"></i>
+                    </div>
+                    <h3>Portfolio Management</h3>
+                    <p>Track your holdings, monitor performance, and get personalized trading insights</p>
+                    <a href="portfolio.html" class="feature-link">Explore <i class="fas fa-arrow-right"></i></a>
+                </div>
+            </div>
+        </div>
+    </section>
 
-    <!-- Run Technical Indicators Calculation -->
-    <div class="endpoint">
-        <h3>Run On-Demand Technical Indicators Calculation</h3>
-        <p><code>GET /api/v1/analysis/technical/run</code></p>
-        <input type="date" id="technicalRunDate" placeholder="Date (optional)">
-        <button onclick="fetchApiData('technicalRun')">Run Calculation</button>
-        <pre id="technicalRunResult"></pre>
-    </div>
+    <!-- Quick Access Section -->
+    <section class="quick-access">
+        <div class="container">
+            <h2 class="section-title">Quick Access</h2>
+            <div class="quick-access-grid">
+                <div class="quick-card">
+                    <h3><i class="fas fa-oil-can"></i> Crude Oil</h3>
+                    <div class="quick-actions">
+                        <button onclick="quickAction('loadCrudeData')" class="btn-quick">
+                            <i class="fas fa-download"></i> Load OHLCV Data
+                        </button>
+                        <button onclick="quickAction('calculateCrudeIndicators')" class="btn-quick">
+                            <i class="fas fa-calculator"></i> Calculate Indicators
+                        </button>
+                        <button onclick="quickAction('viewCrudeLatest')" class="btn-quick">
+                            <i class="fas fa-eye"></i> View Latest
+                        </button>
+                    </div>
+                    <div class="quick-result" id="crudeResult"></div>
+                </div>
 
-    <!-- Reauthenticate -->
-    <div class="endpoint">
-        <h3>Reauthenticate</h3>
-        <p><code>GET /reauthenticate</code></p>
-        <input type="text" id="reauthenticateTotp" placeholder="TOTP">
-        <button onclick="fetchApiData('reauthenticate', 'text')">Reauthenticate</button>
-        <pre id="reauthenticateResult"></pre>
-    </div>
+                <div class="quick-card">
+                    <h3><i class="fas fa-chart-line"></i> Stock Analysis</h3>
+                    <div class="quick-actions">
+                        <button onclick="quickAction('runBTSTAnalysis')" class="btn-quick">
+                            <i class="fas fa-play"></i> Run BTST Analysis
+                        </button>
+                        <button onclick="quickAction('calculateStockIndicators')" class="btn-quick">
+                            <i class="fas fa-calculator"></i> Calculate Indicators
+                        </button>
+                        <button onclick="quickAction('viewBTSTRecommendations')" class="btn-quick">
+                            <i class="fas fa-star"></i> View Recommendations
+                        </button>
+                    </div>
+                    <div class="quick-result" id="stockResult"></div>
+                </div>
 
-</div>
+                <div class="quick-card">
+                    <h3><i class="fas fa-database"></i> Data Management</h3>
+                    <div class="quick-actions">
+                        <button onclick="quickAction('fetchLiveData')" class="btn-quick">
+                            <i class="fas fa-sync"></i> Fetch Live Data
+                        </button>
+                        <button onclick="quickAction('downloadBhavcopy')" class="btn-quick">
+                            <i class="fas fa-download"></i> Download Bhavcopy
+                        </button>
+                    </div>
+                    <div class="quick-result" id="dataResult"></div>
+                </div>
+            </div>
+        </div>
+    </section>
 
-<script>
-    async function fetchApiData(endpointId, type = 'json') {
-        const resultEl = document.getElementById(endpointId + 'Result');
-        resultEl.textContent = 'Loading...';
+    <!-- System Status -->
+    <section class="system-status">
+        <div class="container">
+            <h2 class="section-title">System Status</h2>
+            <div class="status-grid">
+                <div class="status-item">
+                    <div class="status-header">
+                        <span>API Health</span>
+                        <span class="status-badge" id="apiStatus">Checking...</span>
+                    </div>
+                    <div class="status-details" id="apiDetails"></div>
+                </div>
+                <div class="status-item">
+                    <div class="status-header">
+                        <span>Crude Oil Service</span>
+                        <span class="status-badge" id="crudeStatus">Checking...</span>
+                    </div>
+                    <div class="status-details" id="crudeDetails"></div>
+                </div>
+                <div class="status-item">
+                    <div class="status-header">
+                        <span>Database Connection</span>
+                        <span class="status-badge" id="dbStatus">Checking...</span>
+                    </div>
+                    <div class="status-details" id="dbDetails"></div>
+                </div>
+            </div>
+        </div>
+    </section>
 
-        let url = '';
-        switch (endpointId) {
-            case 'btstRec':
-                const recDate = document.getElementById('btstRecDate').value;
-                const recType = document.getElementById('btstRecType').value;
-                url = `/api/v1/analysis/btst/recommendations?recommendation=${recType}`;
-                if (recDate) url += `&date=${recDate}`;
-                break;
-            case 'btstRun':
-                const runDate = document.getElementById('btstRunDate').value;
-                url = `/api/v1/analysis/btst/run`;
-                if (runDate) url += `?date=${runDate}`;
-                break;
-            case 'btstDetailed':
-                const detailedSymbol = document.getElementById('btstDetailedSymbol').value.toUpperCase();
-                const detailedDate = document.getElementById('btstDetailedDate').value;
-                if (!detailedSymbol) {
-                    resultEl.textContent = 'Error: Symbol is required.';
-                    return;
-                }
-                url = `/api/v1/analysis/btst/detailed/${detailedSymbol}`;
-                if (detailedDate) url += `?date=${detailedDate}`;
-                break;
-            case 'allIndicatorsJson':
-                const jsonDate = document.getElementById('allIndicatorsJsonDate').value;
-                url = `/api/v1/analysis/indicators/all/json`;
-                if (jsonDate) url += `?date=${jsonDate}`;
-                break;
-            case 'allIndicatorsCsv':
-                const csvDate = document.getElementById('allIndicatorsCsvDate').value;
-                url = `/api/v1/analysis/indicators/all`;
-                if (csvDate) url += `?date=${csvDate}`;
-                break;
-            case 'singleIndicator':
-                const singleSymbol = document.getElementById('singleIndicatorSymbol').value.toUpperCase();
-                const singleDate = document.getElementById('singleIndicatorDate').value;
-                if (!singleSymbol) {
-                    resultEl.textContent = 'Error: Symbol is required.';
-                    return;
-                }
-                url = `/api/v1/analysis/indicators/${singleSymbol}`;
-                if (singleDate) url += `?date=${singleDate}`;
-                break;
-            case 'bulkDownload':
-                const bulkSymbols = document.getElementById('bulkSymbols').value;
-                const bulkDate = document.getElementById('bulkDate').value;
-                if (!bulkSymbols) {
-                    resultEl.textContent = 'Error: Symbols are required.';
-                    return;
-                }
-                url = `/api/v1/analysis/indicators/bulk/download?symbols=${encodeURIComponent(bulkSymbols)}`;
-                if (bulkDate) url += `&date=${bulkDate}`;
-                break;
-            case 'technicalRun':
-                const technicalRunDate = document.getElementById('technicalRunDate').value;
-                url = `/api/v1/analysis/technical/run`;
-                if (technicalRunDate) url += `?date=${technicalRunDate}`;
-                break;
-            case 'reauthenticate':
-                const totp = document.getElementById('reauthenticateTotp').value;
-                if (!totp) {
-                    resultEl.textContent = 'Error: TOTP is required.';
-                    return;
-                }
-                url = `/reauthenticate?totp=${totp}`;
-                break;
-        }
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4><i class="fas fa-chart-line"></i> Stock Analyzer</h4>
+                    <p>Advanced technical analysis platform for traders and investors.</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Quick Links</h4>
+                    <ul>
+                        <li><a href="crude-oil.html">Crude Oil Analysis</a></li>
+                        <li><a href="stock-analysis.html">Stock Analysis</a></li>
+                        <li><a href="portfolio.html">Portfolio</a></li>
+                        <li><a href="/actuator/health">System Health</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>API Documentation</h4>
+                    <ul>
+                        <li><a href="/api/v1/crude/api-info">Crude Oil API</a></li>
+                        <li><a href="/swagger-ui.html">Swagger UI</a></li>
+                        <li><a href="api-docs/">API Docs</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>System Info</h4>
+                    <p>Version: 1.0.0</p>
+                    <p>Last Updated: Nov 2025</p>
+                    <p>&copy; 2025 Stock Analyzer</p>
+                </div>
+            </div>
+        </div>
+    </footer>
 
-        try {
-            const response = await fetch(url);
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`HTTP error! Status: ${response.status} - ${errorText}`);
-            }
-
-            if (type === 'json') {
-                const data = await response.json();
-                resultEl.textContent = JSON.stringify(data, null, 2);
-            } else if (type === 'csv') {
-                const blob = await response.blob();
-                const link = document.createElement('a');
-                link.href = window.URL.createObjectURL(blob);
-                link.download = 'indicators.csv';
-                link.click();
-                resultEl.textContent = 'Download complete.';
-            } else if (type === 'zip') {
-                const blob = await response.blob();
-                const link = document.createElement('a');
-                link.href = window.URL.createObjectURL(blob);
-                link.download = 'indicators_bulk.zip';
-                link.click();
-                resultEl.textContent = 'Download complete.';
-            } else if (type === 'text') {
-                resultEl.textContent = await response.text();
-            }
-
-        } catch (error) {
-            resultEl.textContent = `Error: ${error.message}`;
-            console.error('Fetch error:', error);
-        }
-    }
-</script>
-
+    <script src="js/main.js?v=1.1"></script>
+    <script src="js/home.js?v=1.1"></script>
 </body>
 </html>
-

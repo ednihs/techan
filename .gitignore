@@ -5,3 +5,12 @@
 /.idea/misc.xml
 /.idea/vcs.xml
 /.idea/workspace.xml
+
+# Exclude heavy data and model files
+/data/
+/models/
+*.ser
+*.zip
+data/models/**
+data/bhavcopy/**
+data/logs/**

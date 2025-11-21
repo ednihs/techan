@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Analysis | Stock Analyzer</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/crude-oil.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container nav-container">
+            <div class="logo">
+                <i class="fas fa-chart-line"></i>
+                <span>Stock Analyzer</span>
+            </div>
+            <ul class="nav-menu" id="navMenu">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="crude-oil.html">Crude Oil Analysis</a></li>
+                <li><a href="stock-analysis.html" class="active">Stock Analysis</a></li>
+                <li><a href="portfolio.html">Portfolio</a></li>
+                <li><a href="#" id="themeToggle"><i class="fas fa-moon"></i></a></li>
+            </ul>
+            <div class="hamburger" id="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Page Header -->
+    <section class="page-header" style="background: linear-gradient(135deg, #3498db 0%, #8e44ad 100%);">
+        <div class="container">
+            <h1><i class="fas fa-chart-bar"></i> Stock Technical Analysis</h1>
+            <p>Comprehensive technical indicators and BTST recommendations for equity trading</p>
+        </div>
+    </section>
+
+    <!-- Main Content -->
+    <div class="container main-content">
+        <!-- BTST Recommendations -->
+        <section class="api-section">
+            <h2><i class="fas fa-star"></i> BTST Recommendations</h2>
+            <div class="api-card">
+                <div class="api-header">
+                    <span class="api-method get">GET</span>
+                    <code>/api/v1/analysis/btst/recommendations</code>
+                </div>
+                <p class="api-description">Get Buy Today Sell Tomorrow recommendations based on technical analysis</p>
+                <div class="api-form">
+                    <div class="form-group">
+                        <label>Date</label>
+                        <input type="date" id="btstRecDate" />
+                    </div>
+                    <div class="form-group">
+                        <label>Recommendation Type</label>
+                        <select id="btstRecType">
+                            <option value="BUY">BUY</option>
+                            <option value="HOLD">HOLD</option>
+                            <option value="AVOID">AVOID</option>
+                        </select>
+                    </div>
+                    <button onclick="fetchBTSTRecommendations()" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Get Recommendations
+                    </button>
+                </div>
+                <div class="api-result" id="btstRecResult"></div>
+            </div>
+        </section>
+
+        <!-- Run BTST Analysis -->
+        <section class="api-section">
+            <h2><i class="fas fa-play"></i> Run BTST Analysis</h2>
+            <div class="api-card">
+                <div class="api-header">
+                    <span class="api-method get">GET</span>
+                    <code>/api/v1/analysis/btst/run</code>
+                </div>
+                <p class="api-description">Trigger on-demand BTST analysis for a specific date</p>
+                <div class="api-form">
+                    <div class="form-group">
+                        <label>Date</label>
+                        <input type="date" id="btstRunDate" />
+                    </div>
+                    <button onclick="runBTSTAnalysis()" class="btn btn-primary">
+                        <i class="fas fa-play"></i> Run Analysis
+                    </button>
+                </div>
+                <div class="api-result" id="btstRunResult"></div>
+            </div>
+        </section>
+
+        <!-- Detailed BTST Analysis -->
+        <section class="api-section">
+            <h2><i class="fas fa-info-circle"></i> Detailed BTST Analysis</h2>
+            <div class="api-card">
+                <div class="api-header">
+                    <span class="api-method get">GET</span>
+                    <code>/api/v1/analysis/btst/detailed/{symbol}</code>
+                </div>
+                <p class="api-description">Get detailed BTST analysis for a specific stock symbol</p>
+                <div class="api-form">
+                    <div class="form-group">
+                        <label>Symbol</label>
+                        <input type="text" id="btstDetailedSymbol" placeholder="e.g., TCS" />
+                    </div>
+                    <div class="form-group">
+                        <label>Date</label>
+                        <input type="date" id="btstDetailedDate" />
+                    </div>
+                    <button onclick="getDetailedBTST()" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Get Details
+                    </button>
+                </div>
+                <div class="api-result" id="btstDetailedResult"></div>
+            </div>
+        </section>
+
+        <!-- Run Technical Indicators -->
+        <section class="api-section">
+            <h2><i class="fas fa-calculator"></i> Calculate Technical Indicators</h2>
+            <div class="api-card">
+                <div class="api-header">
+                    <span class="api-method get">GET</span>
+                    <code>/api/v1/analysis/technical/run</code>
+                </div>
+                <p class="api-description">Run technical indicator calculation for all stocks</p>
+                <div class="api-form">
+                    <div class="form-group">
+                        <label>Date (optional)</label>
+                        <input type="date" id="technicalRunDate" />
+                    </div>
+                    <button onclick="runTechnicalAnalysis()" class="btn btn-primary">
+                        <i class="fas fa-calculator"></i> Calculate
+                    </button>
+                </div>
+                <div class="api-result" id="technicalRunResult"></div>
+            </div>
+        </section>
+
+        <!-- Single Stock Indicator -->
+        <section class="api-section">
+            <h2><i class="fas fa-chart-line"></i> Stock Indicators</h2>
+            <div class="api-card">
+                <div class="api-header">
+                    <span class="api-method get">GET</span>
+                    <code>/api/v1/analysis/indicators/{symbol}</code>
+                </div>
+                <p class="api-description">Get enriched technical indicators for a specific stock</p>
+                <div class="api-form">
+                    <div class="form-group">
+                        <label>Symbol</label>
+                        <input type="text" id="singleIndicatorSymbol" placeholder="e.g., TCS" />
+                    </div>
+                    <div class="form-group">
+                        <label>Date</label>
+                        <input type="date" id="singleIndicatorDate" />
+                    </div>
+                    <button onclick="getStockIndicators()" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Get Indicators
+                    </button>
+                </div>
+                <div class="api-result" id="singleIndicatorResult"></div>
+            </div>
+        </section>
+
+        <!-- All Indicators JSON -->
+        <section class="api-section">
+            <h2><i class="fas fa-database"></i> All Indicators</h2>
+            <div class="api-card">
+                <div class="api-header">
+                    <span class="api-method get">GET</span>
+                    <code>/api/v1/analysis/indicators/all/json</code>
+                </div>
+                <p class="api-description">Get all technical indicators in JSON format</p>
+                <div class="api-form">
+                    <div class="form-group">
+                        <label>Date</label>
+                        <input type="date" id="allIndicatorsJsonDate" />
+                    </div>
+                    <button onclick="getAllIndicators('json')" class="btn btn-primary">
+                        <i class="fas fa-file-code"></i> Get JSON
+                    </button>
+                    <button onclick="getAllIndicators('csv')" class="btn btn-secondary">
+                        <i class="fas fa-file-csv"></i> Download CSV
+                    </button>
+                </div>
+                <div class="api-result" id="allIndicatorsResult"></div>
+            </div>
+        </section>
+
+        <!-- Bulk Download -->
+        <section class="api-section">
+            <h2><i class="fas fa-file-archive"></i> Bulk Download</h2>
+            <div class="api-card">
+                <div class="api-header">
+                    <span class="api-method get">GET</span>
+                    <code>/api/v1/analysis/indicators/bulk/download</code>
+                </div>
+                <p class="api-description">Download indicators for multiple stocks as a ZIP file</p>
+                <div class="api-form">
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label>Symbols (comma-separated)</label>
+                        <input type="text" id="bulkSymbols" placeholder="e.g., TCS,INFY,RELIANCE" style="width: 100%;" />
+                    </div>
+                    <div class="form-group">
+                        <label>Date (optional)</label>
+                        <input type="date" id="bulkDate" />
+                    </div>
+                    <button onclick="bulkDownload()" class="btn btn-primary">
+                        <i class="fas fa-download"></i> Download ZIP
+                    </button>
+                </div>
+                <div class="api-result" id="bulkResult"></div>
+            </div>
+        </section>
+
+        <!-- Fetch Live Data -->
+        <section class="api-section">
+            <h2><i class="fas fa-sync"></i> Fetch Live Data</h2>
+            <div class="api-card">
+                <div class="api-header">
+                    <span class="api-method get">GET</span>
+                    <code>/api/v1/analysis/fetch-live-data</code>
+                </div>
+                <p class="api-description">Fetch live price data from FivePaisa and update the database</p>
+                <div class="api-form">
+                    <button onclick="fetchLiveData()" class="btn btn-primary">
+                        <i class="fas fa-sync"></i> Fetch Now
+                    </button>
+                </div>
+                <div class="api-result" id="fetchLiveResult"></div>
+            </div>
+        </section>
+
+        <!-- Download Bhavcopy -->
+        <section class="api-section">
+            <h2><i class="fas fa-download"></i> Download Bhavcopy</h2>
+            <div class="api-card">
+                <div class="api-header">
+                    <span class="api-method get">GET</span>
+                    <code>/api/v1/analysis/download-bhavcopy</code>
+                </div>
+                <p class="api-description">Download and process NSE Bhavcopy data for a specific date. <strong>This will delete all existing price data for the selected date and replace it with fresh data from NSE.</strong></p>
+                <div class="api-form">
+                    <div class="form-group">
+                        <label>Date</label>
+                        <input type="date" id="bhavcopyDate" />
+                    </div>
+                    <button onclick="downloadBhavcopy()" class="btn btn-primary">
+                        <i class="fas fa-download"></i> Download & Process
+                    </button>
+                </div>
+                <div class="api-result" id="bhavcopyResult"></div>
+            </div>
+        </section>
+
+        <!-- Reauthenticate -->
+        <section class="api-section">
+            <h2><i class="fas fa-key"></i> Reauthenticate</h2>
+            <div class="api-card">
+                <div class="api-header">
+                    <span class="api-method get">GET</span>
+                    <code>/reauthenticate</code>
+                </div>
+                <p class="api-description">Reauthenticate with FivePaisa service using TOTP</p>
+                <div class="api-form">
+                    <div class="form-group">
+                        <label>TOTP Code</label>
+                        <input type="text" id="reauthTOTP" placeholder="Enter 6-digit code" />
+                    </div>
+                    <button onclick="reauthenticate()" class="btn btn-primary">
+                        <i class="fas fa-key"></i> Reauthenticate
+                    </button>
+                </div>
+                <div class="api-result" id="reauthResult"></div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4><i class="fas fa-chart-line"></i> Stock Analyzer</h4>
+                    <p>Advanced technical analysis platform</p>
+                </div>
+                <div class="footer-section">
+                    <h4>API Endpoints</h4>
+                    <ul>
+                        <li><a href="/actuator/health">System Health</a></li>
+                        <li><a href="/swagger-ui.html">Swagger UI</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/main.js?v=1.2"></script>
+    <script src="js/stock-analysis.js?v=1.2"></script>
+</body>
+</html>
+
