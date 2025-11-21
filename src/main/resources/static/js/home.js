@@ -1,9 +1,17 @@
 // ===== Home Page Specific JavaScript =====
 
+// Chart instances
+let crudePriceChartInstance = null;
+let crudeIndicatorsChartInstance = null;
+let equityPriceChartInstance = null;
+let equityIndicatorsChartInstance = null;
+
 // Update stats on page load
 document.addEventListener('DOMContentLoaded', async () => {
     await loadSystemStatus();
     await loadStats();
+    await loadCrudeCharts();
+    await loadEquityCharts();
 });
 
 // Load system status
@@ -259,4 +267,502 @@ setInterval(loadStats, 30000);
 
 // Auto-refresh system status every minute
 setInterval(loadSystemStatus, 60000);
+
+// ===== Chart Functions =====
+
+// Load Crude Oil Charts
+async function loadCrudeCharts() {
+    const timeframe = document.getElementById('crudeTimeframe')?.value || '1H';
+    const limit = 50;
+    
+    try {
+        // Fetch latest indicators data
+        const response = await stockAnalyzer.fetchAPI(`/api/v1/crude/indicators/latest?timeframes=${timeframe}&limit=${limit}`);
+        
+        if (!response.success || !response.data || !response.data[timeframe]) {
+            console.warn('No crude oil data available');
+            return;
+        }
+        
+        const data = response.data[timeframe].reverse(); // Oldest to newest
+        
+        if (data.length === 0) {
+            console.warn('Empty crude oil data');
+            return;
+        }
+        
+        // Extract data for charts
+        const timestamps = data.map(d => new Date(d.timestamp).toLocaleString('en-US', { 
+            month: 'short', 
+            day: 'numeric', 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        }));
+        const closes = data.map(d => d.close || 0);
+        const volumes = data.map(d => d.volume || 0);
+        const rsi = data.map(d => d.rsi14 || null);
+        const vwap = data.map(d => d.vwap || null);
+        const volumeRatio = data.map(d => d.volumeRatio || null);
+        
+        // Update summary
+        const latest = data[data.length - 1];
+        document.getElementById('crudeLatestClose').textContent = latest.close?.toFixed(2) || '-';
+        document.getElementById('crudeLatestRSI').textContent = latest.rsi14?.toFixed(2) || '-';
+        document.getElementById('crudeLatestMACD').textContent = latest.macdCrossoverSignal || '-';
+        document.getElementById('crudeLatestVolRatio').textContent = latest.volumeRatio ? `${latest.volumeRatio.toFixed(2)}%` : '-';
+        document.getElementById('crudeLatestVWAP').textContent = latest.vwap?.toFixed(2) || '-';
+        
+        // Apply color coding to RSI
+        const rsiElement = document.getElementById('crudeLatestRSI');
+        const rsiValue = latest.rsi14;
+        if (rsiValue >= 70) {
+            rsiElement.className = 'summary-value negative';
+        } else if (rsiValue <= 30) {
+            rsiElement.className = 'summary-value positive';
+        } else {
+            rsiElement.className = 'summary-value neutral';
+        }
+        
+        // Apply color to MACD signal
+        const macdElement = document.getElementById('crudeLatestMACD');
+        if (latest.macdCrossoverSignal === 'bullish') {
+            macdElement.className = 'summary-value positive';
+        } else if (latest.macdCrossoverSignal === 'bearish') {
+            macdElement.className = 'summary-value negative';
+        } else {
+            macdElement.className = 'summary-value neutral';
+        }
+        
+        // Create Price & Volume Chart
+        const ctxPrice = document.getElementById('crudePriceChart');
+        if (ctxPrice) {
+            if (crudePriceChartInstance) {
+                crudePriceChartInstance.destroy();
+            }
+            
+            crudePriceChartInstance = new Chart(ctxPrice, {
+                type: 'line',
+                data: {
+                    labels: timestamps,
+                    datasets: [
+                        {
+                            label: 'Close Price',
+                            data: closes,
+                            borderColor: '#3498db',
+                            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                            borderWidth: 2,
+                            yAxisID: 'y',
+                            tension: 0.1
+                        },
+                        {
+                            label: 'VWAP',
+                            data: vwap,
+                            borderColor: '#f39c12',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            yAxisID: 'y',
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toFixed(2);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Price'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Create Indicators Chart
+        const ctxIndicators = document.getElementById('crudeIndicatorsChart');
+        if (ctxIndicators) {
+            if (crudeIndicatorsChartInstance) {
+                crudeIndicatorsChartInstance.destroy();
+            }
+            
+            crudeIndicatorsChartInstance = new Chart(ctxIndicators, {
+                type: 'line',
+                data: {
+                    labels: timestamps,
+                    datasets: [
+                        {
+                            label: 'RSI (14)',
+                            data: rsi,
+                            borderColor: '#9b59b6',
+                            backgroundColor: 'rgba(155, 89, 182, 0.1)',
+                            borderWidth: 2,
+                            yAxisID: 'y',
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Volume Ratio (%)',
+                            data: volumeRatio,
+                            borderColor: '#2ecc71',
+                            backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                            borderWidth: 2,
+                            yAxisID: 'y1',
+                            tension: 0.1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        annotation: {
+                            annotations: {
+                                line1: {
+                                    type: 'line',
+                                    yMin: 70,
+                                    yMax: 70,
+                                    borderColor: '#e74c3c',
+                                    borderWidth: 1,
+                                    borderDash: [5, 5],
+                                    label: {
+                                        content: 'Overbought',
+                                        enabled: true
+                                    }
+                                },
+                                line2: {
+                                    type: 'line',
+                                    yMin: 30,
+                                    yMax: 30,
+                                    borderColor: '#2ecc71',
+                                    borderWidth: 1,
+                                    borderDash: [5, 5],
+                                    label: {
+                                        content: 'Oversold',
+                                        enabled: true
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'RSI'
+                            },
+                            min: 0,
+                            max: 100
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: 'Volume Ratio (%)'
+                            },
+                            grid: {
+                                drawOnChartArea: false,
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error loading crude oil charts:', error);
+        stockAnalyzer.showNotification('Failed to load crude oil charts', 'error');
+    }
+}
+
+// Load Equity Charts
+async function loadEquityCharts() {
+    const symbol = document.getElementById('equitySymbol')?.value || 'TCS';
+    const days = parseInt(document.getElementById('equityDays')?.value || '30');
+    
+    if (!symbol) {
+        stockAnalyzer.showNotification('Please enter a stock symbol', 'error');
+        return;
+    }
+    
+    try {
+        // Fetch price data
+        const priceData = await stockAnalyzer.fetchAPI(`/api/v1/analysis/prices/${symbol}?days=${days}`);
+        
+        if (!priceData || priceData.length === 0) {
+            stockAnalyzer.showNotification(`No data available for ${symbol}`, 'warning');
+            return;
+        }
+        
+        // Fetch indicators for the last 10 records
+        const indicatorData = await stockAnalyzer.fetchAPI(`/api/v1/analysis/indicators/${symbol}`);
+        
+        // Prepare data
+        const timestamps = priceData.map(d => new Date(d.tradeDate).toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric' 
+        }));
+        const closes = priceData.map(d => parseFloat(d.closePrice) || 0);
+        const volumes = priceData.map(d => d.volume || 0);
+        
+        // Map indicators to match price data dates
+        const indicatorMap = {};
+        if (indicatorData && Array.isArray(indicatorData)) {
+            indicatorData.forEach(ind => {
+                const dateKey = new Date(ind.calculationDate).toISOString().split('T')[0];
+                indicatorMap[dateKey] = ind;
+            });
+        }
+        
+        const rsi = priceData.map(d => {
+            const dateKey = new Date(d.tradeDate).toISOString().split('T')[0];
+            return indicatorMap[dateKey]?.rsi14 || null;
+        });
+        
+        const vwap = priceData.map(d => {
+            const dateKey = new Date(d.tradeDate).toISOString().split('T')[0];
+            return indicatorMap[dateKey]?.vwap || null;
+        });
+        
+        const volumeRatio = priceData.map(d => {
+            const dateKey = new Date(d.tradeDate).toISOString().split('T')[0];
+            return indicatorMap[dateKey]?.volumeRatio ? indicatorMap[dateKey].volumeRatio * 100 : null;
+        });
+        
+        const macdHistogram = priceData.map(d => {
+            const dateKey = new Date(d.tradeDate).toISOString().split('T')[0];
+            return indicatorMap[dateKey]?.macdHistogram || null;
+        });
+        
+        // Update summary
+        const latest = priceData[priceData.length - 1];
+        const latestDateKey = new Date(latest.tradeDate).toISOString().split('T')[0];
+        const latestIndicator = indicatorMap[latestDateKey] || {};
+        
+        document.getElementById('equityLatestClose').textContent = parseFloat(latest.closePrice)?.toFixed(2) || '-';
+        document.getElementById('equityLatestRSI').textContent = latestIndicator.rsi14?.toFixed(2) || '-';
+        
+        // Determine MACD signal from histogram
+        let macdSignal = 'neutral';
+        if (latestIndicator.macdHistogram > 0) {
+            macdSignal = 'bullish';
+        } else if (latestIndicator.macdHistogram < 0) {
+            macdSignal = 'bearish';
+        }
+        document.getElementById('equityLatestMACD').textContent = macdSignal;
+        document.getElementById('equityLatestVolRatio').textContent = latestIndicator.volumeRatio ? `${(latestIndicator.volumeRatio * 100).toFixed(2)}%` : '-';
+        document.getElementById('equityLatestVWAP').textContent = latestIndicator.vwap?.toFixed(2) || '-';
+        
+        // Apply color coding
+        const equityRsiElement = document.getElementById('equityLatestRSI');
+        const equityRsiValue = latestIndicator.rsi14;
+        if (equityRsiValue >= 70) {
+            equityRsiElement.className = 'summary-value negative';
+        } else if (equityRsiValue <= 30) {
+            equityRsiElement.className = 'summary-value positive';
+        } else {
+            equityRsiElement.className = 'summary-value neutral';
+        }
+        
+        const equityMacdElement = document.getElementById('equityLatestMACD');
+        if (macdSignal === 'bullish') {
+            equityMacdElement.className = 'summary-value positive';
+        } else if (macdSignal === 'bearish') {
+            equityMacdElement.className = 'summary-value negative';
+        } else {
+            equityMacdElement.className = 'summary-value neutral';
+        }
+        
+        // Create Price & Volume Chart
+        const ctxPrice = document.getElementById('equityPriceChart');
+        if (ctxPrice) {
+            if (equityPriceChartInstance) {
+                equityPriceChartInstance.destroy();
+            }
+            
+            equityPriceChartInstance = new Chart(ctxPrice, {
+                type: 'line',
+                data: {
+                    labels: timestamps,
+                    datasets: [
+                        {
+                            label: 'Close Price',
+                            data: closes,
+                            borderColor: '#3498db',
+                            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                            borderWidth: 2,
+                            yAxisID: 'y',
+                            tension: 0.1,
+                            fill: true
+                        },
+                        {
+                            label: 'VWAP',
+                            data: vwap,
+                            borderColor: '#f39c12',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            yAxisID: 'y',
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: `${symbol} - Price Analysis`
+                        }
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Price (₹)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Create Indicators Chart
+        const ctxIndicators = document.getElementById('equityIndicatorsChart');
+        if (ctxIndicators) {
+            if (equityIndicatorsChartInstance) {
+                equityIndicatorsChartInstance.destroy();
+            }
+            
+            equityIndicatorsChartInstance = new Chart(ctxIndicators, {
+                type: 'line',
+                data: {
+                    labels: timestamps,
+                    datasets: [
+                        {
+                            label: 'RSI (14)',
+                            data: rsi,
+                            borderColor: '#9b59b6',
+                            backgroundColor: 'rgba(155, 89, 182, 0.1)',
+                            borderWidth: 2,
+                            yAxisID: 'y',
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Volume Ratio (%)',
+                            data: volumeRatio,
+                            borderColor: '#2ecc71',
+                            backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                            borderWidth: 2,
+                            yAxisID: 'y1',
+                            tension: 0.1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: `${symbol} - Technical Indicators`
+                        }
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'RSI'
+                            },
+                            min: 0,
+                            max: 100
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: 'Volume Ratio (%)'
+                            },
+                            grid: {
+                                drawOnChartArea: false,
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        stockAnalyzer.showNotification(`Charts loaded for ${symbol}`, 'success');
+        
+    } catch (error) {
+        console.error('Error loading equity charts:', error);
+        stockAnalyzer.showNotification(`Failed to load charts for ${symbol}`, 'error');
+    }
+}
+
+// Make functions globally available
+window.loadCrudeCharts = loadCrudeCharts;
+window.loadEquityCharts = loadEquityCharts;
 

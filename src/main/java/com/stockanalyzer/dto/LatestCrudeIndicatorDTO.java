@@ -22,6 +22,7 @@ public class LatestCrudeIndicatorDTO {
     private LocalDateTime timestamp;
 
     private BigDecimal close;
+    private Long volume;  // Added for chart display
     private BigDecimal rsi14;
     private String macdCrossoverSignal;
     private Long obv;

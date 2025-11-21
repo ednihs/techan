@@ -486,6 +486,7 @@ public class CrudeOilIndicatorService {
                                 .map(ohlcv -> LatestCrudeIndicatorDTO.builder()
                                         .timestamp(ind.getTimestamp())
                                         .close(ohlcv.getClose())
+                                        .volume(ohlcv.getVolume())
                                         .rsi14(ind.getRsi14())
                                         .macdCrossoverSignal(ind.getMacdCrossoverSignal() != null ? ind.getMacdCrossoverSignal().name() : null)
                                         .obv(ind.getObv())
