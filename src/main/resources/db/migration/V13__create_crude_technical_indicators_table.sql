@@ -56,4 +56,3 @@ CREATE TABLE IF NOT EXISTS crude_technical_indicators (
     INDEX idx_timeframe_timestamp (timeframe, timestamp DESC),
     INDEX idx_data_quality (data_quality_flag, timestamp DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Technical indicators for crude oil analysis with volume-based indicators';
-

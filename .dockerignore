@@ -28,4 +28,3 @@ src/test/
 # Exclude logs
 logs/
 *.log
-

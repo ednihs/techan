@@ -16,4 +16,3 @@ CREATE TABLE IF NOT EXISTS crude_ohlcv_data (
     INDEX idx_timeframe_timestamp (timeframe, timestamp DESC),
     INDEX idx_symbol_timeframe (symbol, timeframe)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='OHLCV candle data for crude oil analysis';
-

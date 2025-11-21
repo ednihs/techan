@@ -23,8 +23,3 @@ ALTER TABLE technical_indicators
     ADD COLUMN price_position_stage VARCHAR(20),
     ADD COLUMN momentum_direction VARCHAR(20),
     ADD COLUMN data_completeness VARCHAR(20);
-
-
-
-
-
